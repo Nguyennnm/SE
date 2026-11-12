@@ -1,0 +1,1 @@
+-- TODO: Add sample product data after defining the database schema.
