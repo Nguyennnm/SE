@@ -4,68 +4,89 @@ Bộ khung mã nguồn cho dự án SE.
 
 ## Cấu trúc thư mục
 
-```text
-frontend/
-  public/
-  src/
-    assets/
-    components/
-    pages/
-    hooks/
-    services/
-      apiClient.ts
-      productApi.ts
-    types/
-    App.tsx
-    main.tsx
-  .env.example
-  package.json
-  tsconfig.json
-backend/
-  src/
-    config/
-      database.ts
-      env.ts
-    modules/
-      auth/
-      catalog/
-        product.routes.ts
-        product.controller.ts
-        product.service.ts
-        Product.model.ts
-        product.validation.ts
-      sales/
-      inventory/
-      warranty/
-      customer/
-      promotion/
-      reporting/
-      ai-advisor/
-    middleware/
-      authMiddleware.ts
-      roleGuard.ts
-      errorHandler.ts
-    shared/
-    app.ts
-    server.ts
-  .env.example
-  package.json
-  tsconfig.json
-database/
-  schema.sql
-  migrations/
-  seed/
-    seed-products.sql
-tests/
-  unit/
-  integration/
-  e2e/
-docs/
-  architecture/
-  use-cases/
-  testing/
-.gitignore
-README.md
+```
+├── backend
+│   ├── src
+│   │   ├── config
+│   │   │   ├── database.ts
+│   │   │   └── env.ts
+│   │   ├── middleware
+│   │   │   ├── authMiddleware.ts
+│   │   │   ├── errorHandler.ts
+│   │   │   └── roleGuard.ts
+│   │   ├── modules
+│   │   │   ├── ai-advisor
+│   │   │   │   └── .gitkeep
+│   │   │   ├── auth
+│   │   │   │   └── .gitkeep
+│   │   │   ├── catalog
+│   │   │   │   ├── Product.model.ts
+│   │   │   │   ├── product.controller.ts
+│   │   │   │   ├── product.routes.ts
+│   │   │   │   ├── product.service.ts
+│   │   │   │   └── product.validation.ts
+│   │   │   ├── customer
+│   │   │   │   └── .gitkeep
+│   │   │   ├── inventory
+│   │   │   │   └── .gitkeep
+│   │   │   ├── promotion
+│   │   │   │   └── .gitkeep
+│   │   │   ├── reporting
+│   │   │   │   └── .gitkeep
+│   │   │   ├── sales
+│   │   │   │   └── .gitkeep
+│   │   │   └── warranty
+│   │   │       └── .gitkeep
+│   │   ├── shared
+│   │   │   └── .gitkeep
+│   │   ├── app.ts
+│   │   └── server.ts
+│   ├── package.json
+│   └── tsconfig.json
+├── database
+│   ├── migrations
+│   │   └── .gitkeep
+│   ├── seed
+│   │   └── seed-products.sql
+│   └── schema.sql
+├── docs
+│   ├── architecture
+│   │   └── .gitkeep
+│   ├── testing
+│   │   └── .gitkeep
+│   └── use-cases
+│       └── .gitkeep
+├── frontend
+│   ├── public
+│   │   └── .gitkeep
+│   ├── src
+│   │   ├── assets
+│   │   │   └── .gitkeep
+│   │   ├── components
+│   │   │   └── .gitkeep
+│   │   ├── hooks
+│   │   │   └── .gitkeep
+│   │   ├── pages
+│   │   │   └── .gitkeep
+│   │   ├── services
+│   │   │   ├── apiClient.ts
+│   │   │   └── productApi.ts
+│   │   ├── types
+│   │   │   └── .gitkeep
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   └── tsconfig.json
+├── tests
+│   ├── e2e
+│   │   └── .gitkeep
+│   ├── integration
+│   │   └── .gitkeep
+│   └── unit
+│       └── .gitkeep
+├── .gitignore
+└── README.md
+```
 ```
 
 Các thư mục rỗng có tệp `.gitkeep` để Git lưu lại cấu trúc.
