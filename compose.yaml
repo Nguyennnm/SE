@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ses-phongvu-pa4-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smart_electronics_store}
+      POSTGRES_USER: ${POSTGRES_USER:-ses_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Please create .env with POSTGRES_PASSWORD}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "127.0.0.1:${HOST_POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - phongvu_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+volumes:
+  phongvu_pgdata:

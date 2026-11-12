@@ -1,0 +1,62 @@
+{
+  "total": 1241,
+  "verified": 338,
+  "modelCount": 46,
+  "photos": 55,
+  "clean": [
+    [
+      {
+        "category": "laptop",
+        "total_skus": 401,
+        "verified_2026_skus": 111,
+        "priced_skus": 401,
+        "packaged_images": 38
+      },
+      {
+        "category": "phone",
+        "total_skus": 271,
+        "verified_2026_skus": 147,
+        "priced_skus": 271,
+        "packaged_images": 43
+      },
+      {
+        "category": "tablet",
+        "total_skus": 569,
+        "verified_2026_skus": 80,
+        "priced_skus": 192,
+        "packaged_images": 36
+      }
+    ],
+    [
+      {
+        "category": "laptop",
+        "pv_variants": 111,
+        "pv_models": 18,
+        "demo_cart_ready": 58
+      },
+      {
+        "category": "phone",
+        "pv_variants": 147,
+        "pv_models": 22,
+        "demo_cart_ready": 30
+      },
+      {
+        "category": "tablet",
+        "pv_variants": 80,
+        "pv_models": 6,
+        "demo_cart_ready": 15
+      }
+    ]
+  ],
+  "tests": [
+    "fresh database",
+    "second import",
+    "existing PA4 seed",
+    "source price and simulated inventory",
+    "one main image per model"
+  ],
+  "image_urls": 1241,
+  "offline_images_validated": 117,
+  "offline_images_2026": 52,
+  "gallery_image_urls": 12
+}
