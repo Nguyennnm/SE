@@ -1,4 +1,4 @@
--- Smart Electronics Store PA4 | PostgreSQL 16+ | Catalog 2026
+-- Smart Electronics Store PA4 | PostgreSQL 16+ | Catalog independent crawl (no launch-year filter)
 -- Chỉ chứa 3 danh mục sản phẩm. Mọi SKU DEMO-* và tồn kho đều là dữ liệu mô phỏng.
 CREATE TABLE IF NOT EXISTS categories (
     id SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
