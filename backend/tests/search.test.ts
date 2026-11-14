@@ -1,4 +1,5 @@
 import app from '../src/app.js';
+import { checkDatabaseConnection, isDatabaseConnected } from '../src/config/database.js';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
 
@@ -19,6 +20,15 @@ async function runTestSuite() {
   console.log(' Phân công: Hoàng Lê Đăng Khoa (MSSV: 24120343)');
   console.log(' Căn cứ: PA4-Group07/TestPlan-TestCase.pdf (Mục 2.2)');
   console.log('================================================================\n');
+
+  // Ket noi DB truoc (neu co): tu nay test moi thuc su chay duong DB
+  // thay vi luc nao cung roi ve mock nhu truoc. Khong co DB -> chay mock.
+  const dbMode = await checkDatabaseConnection();
+  console.log(
+    dbMode
+      ? '[Test] Che do DATABASE (PostgreSQL) - kiem tra duong truy van that'
+      : '[Test] Che do MOCK (khong co PostgreSQL) - chi kiem tra logic API + du lieu mau'
+  );
 
   // Khởi động test server trên ephemeral port
   const server: Server = await new Promise((resolve) => {
@@ -232,19 +242,30 @@ async function runTestSuite() {
 
     // -------------------------------------------------------------
     // Bổ sung: Kiểm tra UC16 - Chi tiết sản phẩm theo ID
+    // Mock: SP001 iPhone 16 kem 3 bien the. DB that: lay san pham that
+    // dau tien tu API (id so, khong co SP001) va yeu cau >= 1 bien the.
     // -------------------------------------------------------------
     try {
-      const res = await fetch(`${baseUrl}/api/products/SP001`);
+      let detailId = 'SP001';
+      let minVariants = 3;
+      if (isDatabaseConnected()) {
+        const listRes = await fetch(`${baseUrl}/api/products/search?limit=1`);
+        const listData = await listRes.json();
+        detailId = String(listData.data[0].id);
+        minVariants = 1;
+      }
+
+      const res = await fetch(`${baseUrl}/api/products/${detailId}`);
       const data = await res.json();
 
       const passed =
         res.status === 200 &&
         data.success === true &&
-        data.data?.id === 'SP001' &&
-        data.data?.variants?.length >= 3;
+        String(data.data?.id) === detailId &&
+        (data.data?.variants?.length ?? 0) >= minVariants;
 
       results.push({
-        name: 'Lấy chi tiết sản phẩm theo ID (UC16 - SP001 iPhone 16 kèm 3 biến thể)',
+        name: `Lấy chi tiết sản phẩm theo ID (UC16 - ${detailId} kèm ${minVariants}+ biến thể)`,
         testCaseId: 'UC16-01',
         passed,
         details: {
@@ -328,7 +349,13 @@ async function runTestSuite() {
   }
 
   console.log('----------------------------------------------------------------');
-  console.log(`TỔNG CỘNG: ${passedCount}/${results.length} Test cases đạt yêu cầu (100% Passed).`);
+  const pct = Math.round((passedCount / results.length) * 100);
+  console.log(`TỔNG CỘNG: ${passedCount}/${results.length} Test cases đạt yêu cầu (${pct}%).`);
+  if (passedCount === results.length) {
+    console.log('Tất cả test case đều PASS.');
+  } else {
+    console.log('CÒN TEST CASE FAIL — xem chi tiết ở trên.');
+  }
   console.log('================================================================\n');
 
   if (passedCount !== results.length) {

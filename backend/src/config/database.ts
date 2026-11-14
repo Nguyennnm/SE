@@ -3,6 +3,12 @@ import { env } from './env.js';
 
 const { Pool } = pg;
 
+// pg tra NUMERIC (1700) va BIGINT (20) ve dang chuoi theo mac dinh.
+// Chuyen ve number de gia/id dung duoc trong so sanh va JSON tra ve
+// (gia < 2^53 nen an toan; neu vuot nguong nay thi can xem lai).
+pg.types.setTypeParser(20, (v) => parseInt(v, 10));
+pg.types.setTypeParser(1700, (v) => parseFloat(v));
+
 export const pool = new Pool({
   host: env.DB_HOST,
   port: env.DB_PORT,

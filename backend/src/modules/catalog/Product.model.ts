@@ -32,8 +32,10 @@ export interface Product {
   original_price?: number;
   selling_price_vnd?: number;
   stock: number;
-  rating: number;
-  review_count: number;
+  // Chua co bang danh gia (UC26 nam ngoai pham vi PA4): duong DB that tra NULL,
+  // khong bia so lieu. Du lieu mock van co rating that de test.
+  rating: number | null;
+  review_count: number | null;
   image_url?: string;
   images?: ProductImage[];
   variants?: ProductVariant[];
