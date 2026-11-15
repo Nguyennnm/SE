@@ -4,6 +4,21 @@ import { validateSearchParams } from './product.validation.js';
 import { successResponse } from '../../shared/response.js';
 
 export class ProductController {
+  async getTechnicalFilters(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+      res.json(successResponse(await productService.getTechnicalFilters(category), 'Thông số lọc theo danh mục'));
+    } catch (error) { next(error); }
+  }
+
+  async getSuggestions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const params = validateSearchParams(req.query);
+      if (!params.q || params.q.length < 2) { res.json(successResponse([])); return; }
+      const result = await productService.searchProducts({ ...params, page: 1, limit: 5 });
+      res.json(successResponse(result.items, 'Gợi ý sản phẩm'));
+    } catch (error) { next(error); }
+  }
   /**
    * GET /api/products (hoặc /api/products/search)
    * Phục vụ Use Case UC17: Tìm kiếm và lọc sản phẩm

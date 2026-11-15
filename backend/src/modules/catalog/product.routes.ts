@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { productController } from './product.controller.js';
 
 const router = Router();
+router.get('/filters', (req, res, next) => productController.getTechnicalFilters(req, res, next));
+router.get('/suggestions', (req, res, next) => productController.getSuggestions(req, res, next));
 
 /**
  * Route danh mục và thương hiệu (đặt trước /:id để tránh bị nuốt bởi route param)

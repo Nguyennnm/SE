@@ -1,3 +1,5 @@
+import type { SpecSelection } from './product.facets.js';
+
 export interface ProductImage {
   id?: number | string;
   image_url: string;
@@ -46,7 +48,8 @@ export interface Product {
   is_active: boolean;
 }
 
-export interface ProductSearchParams {
+export interface ProductSearchParams extends SpecSelection {
+  ids?: string[];
   q?: string;
   category?: string;
   brand?: string | string[];

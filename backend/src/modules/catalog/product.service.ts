@@ -1,6 +1,7 @@
 import { isDatabaseConnected, query } from '../../config/database.js';
 import { AppError } from '../../middleware/errorHandler.js';
 import { env } from '../../config/env.js';
+import { facetGroups, matchesSpecs, specKeys, type FacetRow } from './product.facets.js';
 import {
   MOCK_TEST_PRODUCTS,
   type Product,
@@ -35,43 +36,27 @@ function requireMockMode(): void {
 }
 
 /**
- * CTE dùng chung cho cả truy vấn đếm và truy vấn dữ liệu (UC17).
- *
- * - rep_variant: "biến thể đại diện" của mỗi sản phẩm = biến thể đang bán có
- *   giá bán rẻ nhất (giá NULL xếp cuối, hòa thì lấy id nhỏ nhất). Mọi chỗ
- *   hiển thị/lọc/sắp xếp theo giá đều dùng đúng MỘT biến thể này, nên giá
- *   hiển thị không bao giờ lệch với giá đã lọc/sắp xếp.
- *   (Bản cũ dùng DISTINCT ON (p.id) + ORDER BY p.id nên lấy biến thể
- *   bất kỳ -> giá hiển thị có thể là của biến thể khác với biến thể đã
- *   qua bộ lọc giá.)
- * - variant_stats: tổng tồn khả dụng và số biến thể của mỗi sản phẩm.
+ * Apply specifications, price and availability to the SAME SKU first.
+ * Pick the cheapest eligible variant for each product. Count, displayed price,
+ * stock and returned variants all refer to the same eligible set.
  */
-const SEARCH_CTE = `
-WITH rep_variant AS (
-  SELECT DISTINCT ON (v.product_id)
-    v.product_id,
-    v.id AS variant_id,
-    v.sku,
-    v.variant_name,
-    v.selling_price_vnd,
-    v.ram_gb,
-    v.storage_gb,
-    COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0) AS available
+const searchCte = (conditions: string[]) => `
+WITH eligible_variants AS (
+  SELECT v.*, GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0) AS available
   FROM product_variants v
   LEFT JOIN inventory_items i ON i.variant_id = v.id
-  WHERE v.is_active = TRUE
+  WHERE ${conditions.join(' AND ')}
+),
+rep_variant AS (
+  SELECT DISTINCT ON (v.product_id) v.product_id, v.id AS variant_id,
+    v.sku, v.variant_name, v.selling_price_vnd, v.ram_gb, v.storage_gb, v.available
+  FROM eligible_variants v
   ORDER BY v.product_id, v.selling_price_vnd ASC NULLS LAST, v.id ASC
 ),
 variant_stats AS (
-  SELECT
-    v.product_id,
-    COUNT(*) AS variant_count,
-    COALESCE(SUM(GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0)), 0) AS total_available,
-    BOOL_OR(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0) > 0) AS has_stock
-  FROM product_variants v
-  LEFT JOIN inventory_items i ON i.variant_id = v.id
-  WHERE v.is_active = TRUE
-  GROUP BY v.product_id
+  SELECT v.product_id, COUNT(*) AS variant_count, COALESCE(SUM(v.available), 0) AS total_available,
+    BOOL_OR(v.available > 0) AS has_stock
+  FROM eligible_variants v GROUP BY v.product_id
 )`;
 
 export class ProductService {
@@ -106,6 +91,27 @@ export class ProductService {
     const whereConditions: string[] = ['p.is_active = TRUE'];
     const values: any[] = [];
     let paramIndex = 1;
+    const variantConditions = ['v.is_active = TRUE'];
+    if (specKeys.some(key => params[key]?.length)) {
+      const rows = await this.getFacetRows(params.category);
+      const ids = rows.filter(row => matchesSpecs(row, params)).map(row => row.id);
+      variantConditions.push(`v.id = ANY($${paramIndex++}::bigint[])`);
+      values.push(ids);
+    }
+    for (const [key, operator] of [['minPrice', '>='], ['maxPrice', '<=']] as const) {
+      if (params[key] !== undefined) {
+        variantConditions.push(`v.selling_price_vnd ${operator} $${paramIndex++}`);
+        values.push(params[key]);
+      }
+    }
+    if (params.inStock) variantConditions.push('COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0) > 0');
+    const cte = searchCte(variantConditions);
+    const variantValues = [...values];
+    whereConditions.push('rv.variant_id IS NOT NULL');
+    if (params.ids) {
+      whereConditions.push(`p.id::text = ANY($${paramIndex++}::text[])`);
+      values.push(params.ids);
+    }
 
     // 1. Tìm kiếm từ khóa (Keyword q) — không phân biệt có dấu/không dấu (BR04).
     //    So khớp trên tên model, thương hiệu, danh mục và tên biến thể.
@@ -117,7 +123,7 @@ export class ProductService {
         `(${stripAccents('p.model_name')} LIKE ${like} ` +
           `OR ${stripAccents('b.name')} LIKE ${like} ` +
           `OR ${stripAccents('c.name')} LIKE ${like} ` +
-          `OR EXISTS (SELECT 1 FROM product_variants v2 WHERE v2.product_id = p.id ` +
+          `OR EXISTS (SELECT 1 FROM eligible_variants v2 WHERE v2.product_id = p.id ` +
           `AND ${stripAccents('v2.variant_name')} LIKE ${like}))`
       );
       values.push(kw);
@@ -146,27 +152,6 @@ export class ProductService {
       }
     }
 
-    // 4. Lọc khoảng giá (minPrice, maxPrice) - BR04 (AND logic).
-    //    So với giá của BIẾN THỂ ĐẠI DIỆN (rẻ nhất). Sản phẩm chưa có giá
-    //    (selling_price_vnd NULL) không khớp bộ lọc giá thay vì bị coi là 0đ
-    //    như bản cũ (COALESCE(..., 0)).
-    if (params.minPrice !== undefined) {
-      whereConditions.push(`rv.selling_price_vnd >= $${paramIndex}`);
-      values.push(params.minPrice);
-      paramIndex++;
-    }
-
-    if (params.maxPrice !== undefined) {
-      whereConditions.push(`rv.selling_price_vnd <= $${paramIndex}`);
-      values.push(params.maxPrice);
-      paramIndex++;
-    }
-
-    // 5. Lọc chỉ xem còn hàng (inStock) - BR09 (Tồn khả dụng > 0 ở BẤT KỲ biến thể nào)
-    if (params.inStock) {
-      whereConditions.push(`vs.has_stock = TRUE`);
-    }
-
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     // Sắp xếp (Sort) — chỉ dùng các giá trị cố định trong code, không nối chuỗi từ người dùng
@@ -177,13 +162,14 @@ export class ProductService {
       orderBy = 'rv.selling_price_vnd DESC NULLS LAST, p.id DESC';
     } else if (params.sort === 'rating') {
       orderBy = 'rating DESC NULLS LAST, p.id DESC';
+
     } else if (params.sort === 'relevant') {
       orderBy = 'p.id DESC';
     }
 
     // Đếm tổng số lượng bản ghi thỏa mãn (dùng đúng CTE + WHERE như truy vấn dữ liệu)
     const countSql = `
-      ${SEARCH_CTE}
+      ${cte}
       SELECT COUNT(*) as total
       FROM products p
       JOIN categories c ON c.id = p.category_id
@@ -200,7 +186,7 @@ export class ProductService {
     // rating/review_count = NULL: schema hiện chưa có bảng đánh giá (UC26
     // nằm ngoài phạm vi PA4), nên KHÔNG bịa số 4.6/50 như bản cũ.
     const dataSql = `
-      ${SEARCH_CTE}
+      ${cte}
       SELECT
         p.id,
         p.slug,
@@ -240,15 +226,14 @@ export class ProductService {
     if (items.length > 0) {
       const ids = items.map((p) => Number(p.id));
       const variantsRes = await query<ProductVariant & { product_id: number }>(
-        `SELECT v.product_id, v.id, v.sku, v.variant_name, v.ram_gb, v.storage_gb,
+        `${cte}
+         SELECT v.product_id, v.id, v.sku, v.variant_name, v.ram_gb, v.storage_gb,
                 v.selling_price_vnd, v.price_vnd, v.is_active,
-                v.specifications, v.short_description,
-                COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0) AS stock
-         FROM product_variants v
-         LEFT JOIN inventory_items i ON i.variant_id = v.id
-         WHERE v.product_id = ANY($1::bigint[]) AND v.is_active = TRUE
+                v.specifications, v.short_description, v.available AS stock
+         FROM eligible_variants v
+         WHERE v.product_id = ANY($${variantValues.length + 1}::bigint[])
          ORDER BY v.product_id, v.selling_price_vnd ASC NULLS LAST, v.id ASC`,
-        [ids]
+        [...variantValues, ids]
       );
       const byProduct = new Map<number, ProductVariant[]>();
       for (const v of variantsRes.rows) {
@@ -280,6 +265,18 @@ export class ProductService {
     offset: number
   ): ProductSearchResult {
     let filtered = [...MOCK_TEST_PRODUCTS];
+    if (params.ids) filtered = filtered.filter(p => params.ids!.includes(String(p.id)));
+    if (specKeys.some(key => params[key]?.length)) {
+      filtered = filtered.flatMap(p => {
+        const variants = p.variants?.length ? p.variants : [{ sku: String(p.id), variant_name: p.name, price_vnd: p.price, selling_price_vnd: p.price, stock: p.stock, is_active: p.is_active, ram_gb: parseInt(p.specifications?.ram), storage_gb: parseInt(p.specifications?.storage), specifications: p.specifications }];
+        const matching = variants.filter(v => matchesSpecs({ ram_gb: v.ram_gb ?? null, storage_gb: v.storage_gb ?? null, specifications: { ...p.specifications, ...v.specifications } }, params)
+          && (params.minPrice === undefined || (v.selling_price_vnd ?? v.price_vnd) >= params.minPrice)
+          && (params.maxPrice === undefined || (v.selling_price_vnd ?? v.price_vnd) <= params.maxPrice)
+          && (!params.inStock || v.stock > 0))
+          .sort((a, b) => (a.selling_price_vnd ?? a.price_vnd) - (b.selling_price_vnd ?? b.price_vnd));
+        return matching.length ? [{ ...p, variants: matching, price: matching[0].selling_price_vnd ?? matching[0].price_vnd, stock: matching.reduce((sum, v) => sum + v.stock, 0) }] : [];
+      });
+    }
 
     // Chỉ hiển thị sản phẩm đang kinh doanh trong tìm kiếm công khai
     filtered = filtered.filter((p) => p.is_active);
@@ -340,6 +337,7 @@ export class ProductService {
       filtered.sort((a, b) => b.price - a.price);
     } else if (params.sort === 'rating') {
       filtered.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+
     }
 
     const total = filtered.length;
@@ -467,28 +465,42 @@ export class ProductService {
   /**
    * Lấy danh sách thương hiệu theo danh mục
    */
+  async getFacetRows(category?: string): Promise<FacetRow[]> {
+    if (isDatabaseConnected()) {
+      const result = await query<FacetRow>(`
+        SELECT v.id, v.product_id, c.code AS category_code, b.name AS brand,
+          v.ram_gb, v.storage_gb, p.specifications || v.specifications AS specifications
+        FROM product_variants v JOIN products p ON p.id = v.product_id
+        JOIN categories c ON c.id = p.category_id JOIN brands b ON b.id = p.brand_id
+        WHERE p.is_active AND v.is_active
+          AND ($1::text IS NULL OR c.code = $1 OR unaccent(lower(c.name)) = unaccent(lower($1)))`,
+        [category && category !== 'Tất cả' ? category : null]);
+      return result.rows;
+    }
+    requireMockMode();
+    return MOCK_TEST_PRODUCTS.filter(p => p.is_active && (!category || category === 'Tất cả' || p.category_code === category || p.category === category)).flatMap((p, index) =>
+      (p.variants?.length ? p.variants : [{ id: index + 1, ram_gb: parseInt(p.specifications?.ram) || null, storage_gb: parseInt(p.specifications?.storage) || null, specifications: p.specifications }]).map((v, i) => ({
+        id: Number(v.id) || index * 100 + i + 1, product_id: index + 1, category_code: p.category_code, brand: p.brand,
+        ram_gb: v.ram_gb ?? null, storage_gb: v.storage_gb ?? null, specifications: { ...p.specifications, ...v.specifications },
+      })));
+  }
+
   async getBrands(category?: string): Promise<string[]> {
     if (isDatabaseConnected()) {
-      let sql = 'SELECT DISTINCT b.name FROM brands b';
-      const values: any[] = [];
-      if (category && category !== 'Tất cả') {
-        sql += ' JOIN products p ON p.brand_id = b.id JOIN categories c ON c.id = p.category_id WHERE c.code = $1 OR lower(c.name) = lower($1)';
-        values.push(category);
-      }
-      sql += ' ORDER BY b.name ASC';
-      const res = await query<{ name: string }>(sql, values);
-      return res.rows.map((r) => r.name);
+      const result = await query<{ name: string }>(`SELECT DISTINCT b.name FROM brands b
+        JOIN products p ON p.brand_id = b.id JOIN categories c ON c.id = p.category_id
+        WHERE p.is_active AND EXISTS (SELECT 1 FROM product_variants v WHERE v.product_id = p.id AND v.is_active)
+          AND ($1::text IS NULL OR c.code = $1 OR unaccent(lower(c.name)) = unaccent(lower($1))) ORDER BY b.name`,
+        [category && category !== 'Tất cả' ? category : null]);
+      return result.rows.map(row => row.name);
     }
-
-    requireMockMode();
-    const set = new Set<string>();
-    for (const p of MOCK_TEST_PRODUCTS) {
-      if (!category || category === 'Tất cả' || p.category === category || p.category_code === category) {
-        set.add(p.brand);
-      }
-    }
-    return Array.from(set);
+    return [...new Set((await this.getFacetRows(category)).map(row => row.brand))].sort();
   }
+
+  async getTechnicalFilters(category?: string) {
+    return facetGroups(await this.getFacetRows(category), category);
+  }
+
 }
 
 export const productService = new ProductService();

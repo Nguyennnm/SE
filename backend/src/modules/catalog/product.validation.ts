@@ -1,5 +1,6 @@
 import { AppError } from '../../middleware/errorHandler.js';
 import type { ProductSearchParams } from './Product.model.js';
+import { specKeys } from './product.facets.js';
 
 export function validateSearchParams(query: Record<string, any>): ProductSearchParams {
   const params: ProductSearchParams = {};
@@ -9,6 +10,26 @@ export function validateSearchParams(query: Record<string, any>): ProductSearchP
     params.q = String(query.q).trim();
   } else if (query.keyword !== undefined && query.keyword !== null) {
     params.q = String(query.keyword).trim();
+  }
+
+  if (params.q && params.q.length > 200) {
+    throw new AppError('Từ khóa tối đa 200 ký tự.', 400, 'INVALID_QUERY');
+  }
+  // Repeated or comma-separated facet values; OR within a group, AND across groups.
+  const list = (value: unknown) => (Array.isArray(value) ? value : [value]).flatMap(v => String(v).split(',')).map(v => v.trim()).filter(Boolean);
+  for (const key of specKeys) {
+    if (query[key] !== undefined) {
+      const values = [...new Set(list(query[key]))];
+      if (!values.length || values.length > 30 || values.some(v => v.length > 80 || (['ram', 'storage', 'screenSize', 'refreshRate'].includes(key) && (!Number.isFinite(Number(v)) || Number(v) <= 0)))) {
+        throw new AppError(`Bộ lọc ${key} không hợp lệ.`, 400, 'INVALID_SPEC_FILTER');
+      }
+      params[key] = ['ram', 'storage', 'screenSize', 'refreshRate'].includes(key) ? values.map(v => String(Number(v))) : values;
+    }
+  }
+  if (query.ids !== undefined) {
+    const ids = list(query.ids);
+    if (ids.length > 200 || ids.some(id => !/^[a-zA-Z0-9-]+$/.test(id))) throw new AppError('Danh sách sản phẩm không hợp lệ.', 400, 'INVALID_IDS');
+    params.ids = ids;
   }
 
   // 2. Category filter
