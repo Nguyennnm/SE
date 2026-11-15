@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "tsx tests/search.test.ts",
-    "test:integration": "tsx tests/integration.test.ts"
+    "test:integration": "tsx tests/integration.test.ts",
+    "test:discovery": "tsx tests/discovery.test.ts"
   },
   "dependencies": {
     "cors": "^2.8.6",
