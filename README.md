@@ -4,6 +4,8 @@ Bộ khung mã nguồn cho dự án SE.
 
 ## Chạy luồng tìm kiếm PA4
 
+Xem [README màn hình tìm kiếm sản phẩm](frontend/README.md) để biết chức năng, cấu trúc frontend, API sử dụng và kịch bản trình diễn.
+
 Frontend React + TypeScript gọi API Node.js/Express ở cổng `5000`, truy vấn PostgreSQL ở cổng `5434`.
 
 Xem [hướng dẫn chạy, kịch bản demo và kiểm thử UC17/UC16](docs/integration/search-demo.md). Nếu database đã có dữ liệu, khởi động bằng `docker compose up -d --wait`, sau đó chạy `npm ci` và `npm run dev` trong từng thư mục `backend` và `frontend` ở hai terminal riêng.
