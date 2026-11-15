@@ -3,6 +3,8 @@ import cors from 'cors';
 import productRoutes from './modules/catalog/product.routes.js';
 import { productController } from './modules/catalog/product.controller.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { isDatabaseConnected, checkDatabaseConnection } from './config/database.js';
+import { env } from './config/env.js';
 
 const app: Application = express();
 
@@ -12,11 +14,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Healthcheck endpoint
-app.get('/api/health', (_req, res) => {
+app.get('/api/health', async (_req, res) => {
+  await checkDatabaseConnection();
   res.status(200).json({
     status: 'ok',
     service: 'smart-electronics-store-backend',
     version: '1.0.0',
+    database: isDatabaseConnected() ? 'connected' : 'disconnected',
+    dataSource: isDatabaseConnected() ? 'postgresql' : env.ALLOW_MOCK_DATA ? 'mock' : 'unavailable',
     timestamp: new Date().toISOString(),
   });
 });

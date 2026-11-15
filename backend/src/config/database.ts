@@ -28,15 +28,13 @@ let dbConnected = false;
 
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
-    const client = await pool.connect();
-    await client.query('SELECT 1');
-    client.release();
+    await pool.query('SELECT 1');
     dbConnected = true;
     console.log(`[DB] Connected to PostgreSQL at ${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}`);
     return true;
   } catch (error: any) {
     dbConnected = false;
-    console.warn(`[DB] PostgreSQL not reachable (${error.message}). Running in mock/standalone mode.`);
+    console.warn(`[DB] PostgreSQL not reachable (${error.message}). ${env.ALLOW_MOCK_DATA ? 'Explicit mock mode enabled.' : 'Catalog requests will return 503.'}`);
     return false;
   }
 }

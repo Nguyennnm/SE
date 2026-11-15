@@ -1,5 +1,6 @@
 import { isDatabaseConnected, query } from '../../config/database.js';
 import { AppError } from '../../middleware/errorHandler.js';
+import { env } from '../../config/env.js';
 import {
   MOCK_TEST_PRODUCTS,
   type Product,
@@ -26,6 +27,12 @@ function normalizeText(str: string): string {
  */
 const stripAccents = (expr: string) =>
   `translate(unaccent(lower(${expr})), 'đ', 'd')`;
+
+function requireMockMode(): void {
+  if (!env.ALLOW_MOCK_DATA) {
+    throw new AppError('Chưa kết nối được PostgreSQL. Vui lòng kiểm tra database và cấu hình kết nối.', 503, 'DATABASE_UNAVAILABLE');
+  }
+}
 
 /**
  * CTE dùng chung cho cả truy vấn đếm và truy vấn dữ liệu (UC17).
@@ -83,6 +90,7 @@ export class ProductService {
     }
 
     // 2. Fallback / Test Data mode (phục vụ kiểm thử TC17-01 đến TC17-05 theo TestPlan-TestCase.pdf)
+    requireMockMode();
     return this.searchMockData(params, page, limit, offset);
   }
 
@@ -101,8 +109,9 @@ export class ProductService {
 
     // 1. Tìm kiếm từ khóa (Keyword q) — không phân biệt có dấu/không dấu (BR04).
     //    So khớp trên tên model, thương hiệu, danh mục và tên biến thể.
-    if (params.q) {
-      const kw = `%${params.q.toLowerCase()}%`;
+    for (const word of params.q?.trim().split(/\s+/).filter(Boolean) ?? []) {
+      // Treat wildcard characters as literal input; each word must match.
+      const kw = `%${word.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`;
       const like = `${stripAccents(`$${paramIndex}`)}`;
       whereConditions.push(
         `(${stripAccents('p.model_name')} LIKE ${like} ` +
@@ -423,6 +432,7 @@ export class ProductService {
     }
 
     // Fallback Mock
+    requireMockMode();
     const product = MOCK_TEST_PRODUCTS.find(
       (p) => String(p.id) === idOrSlug || p.code === idOrSlug || p.slug === idOrSlug
     );
@@ -446,6 +456,7 @@ export class ProductService {
       const res = await query('SELECT code, name FROM categories ORDER BY id ASC');
       return res.rows;
     }
+    requireMockMode();
     return [
       { code: 'laptop', name: 'Laptop' },
       { code: 'phone', name: 'Điện thoại' },
@@ -469,6 +480,7 @@ export class ProductService {
       return res.rows.map((r) => r.name);
     }
 
+    requireMockMode();
     const set = new Set<string>();
     for (const p of MOCK_TEST_PRODUCTS) {
       if (!category || category === 'Tất cả' || p.category === category || p.category_code === category) {

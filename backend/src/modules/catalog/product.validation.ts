@@ -32,7 +32,7 @@ export function validateSearchParams(query: Record<string, any>): ProductSearchP
   // 4. Min Price
   if (query.minPrice !== undefined && query.minPrice !== '') {
     const min = Number(query.minPrice);
-    if (isNaN(min) || min < 0) {
+    if (!Number.isFinite(min) || min < 0) {
       throw new AppError('Giá tối thiểu (minPrice) không hợp lệ, phải là số >= 0', 400, 'INVALID_PRICE_FILTER');
     }
     params.minPrice = min;
@@ -41,7 +41,7 @@ export function validateSearchParams(query: Record<string, any>): ProductSearchP
   // 5. Max Price
   if (query.maxPrice !== undefined && query.maxPrice !== '') {
     const max = Number(query.maxPrice);
-    if (isNaN(max) || max < 0) {
+    if (!Number.isFinite(max) || max < 0) {
       throw new AppError('Giá tối đa (maxPrice) không hợp lệ, phải là số >= 0', 400, 'INVALID_PRICE_FILTER');
     }
     params.maxPrice = max;
@@ -74,7 +74,7 @@ export function validateSearchParams(query: Record<string, any>): ProductSearchP
   // 8. Pagination
   if (query.page !== undefined) {
     const page = Number(query.page);
-    if (isNaN(page) || page < 1) {
+    if (!Number.isSafeInteger(page) || page < 1) {
       throw new AppError('Trang (page) phải là số nguyên dương >= 1', 400, 'INVALID_PAGE');
     }
     params.page = Math.floor(page);
@@ -84,7 +84,7 @@ export function validateSearchParams(query: Record<string, any>): ProductSearchP
 
   if (query.limit !== undefined) {
     const limit = Number(query.limit);
-    if (isNaN(limit) || limit < 1 || limit > 100) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new AppError('Số lượng sản phẩm mỗi trang (limit) phải từ 1 đến 100', 400, 'INVALID_LIMIT');
     }
     params.limit = Math.floor(limit);
