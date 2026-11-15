@@ -48,6 +48,9 @@ Phải thấy `database: connected` và `dataSource: postgresql`. API tìm kiế
 5. Chọn tất cả danh mục, bỏ từ khóa, chọn máy tính bảng: sản phẩm chưa có giá hiển thị “Chưa có giá”. Không hiển thị giá 0 hay phần trăm giảm bịa.
 6. Bấm sản phẩm: UI gọi `/api/products/:id`, hiển thị cấu hình/SKU và giá, tồn kho của từng biến thể. Nếu URL ảnh lỗi, hiển thị hình vector dự phòng.
 7. Dừng backend: tìm lại để thấy thông báo lỗi và nút thử lại. Bật backend rồi bấm thử lại.
+8. Chọn laptop, lọc RAM 16 GB + SSD 512 GB + Windows. Mở chi tiết để kiểm tra SKU đang xem giữ đúng cấu hình đã lọc.
+9. Chuyển sang điện thoại: các hãng chỉ bán laptop và bộ lọc nhu cầu laptop biến mất. Hãng/thông số chọn trước đó được xóa để không giữ điều kiện không tương thích.
+10. Gõ `ip` và chờ gợi ý hiện theo bộ lọc hiện tại. Dùng ↑/↓ và Enter hoặc chuột để chọn; Esc để đóng.
 
 Đánh giá chưa có trong database được hiển thị là “Chưa có đánh giá”. Giá là snapshot catalog, tồn kho là dữ liệu mô phỏng.
 
@@ -58,10 +61,12 @@ cd backend
 npm run build
 npm test
 npm run test:integration
+npm run test:discovery
 cd ../frontend
 npm run build
 # Cần backend đang chạy ở terminal riêng:
 npm run test:integration
+npm run test:discovery
 ```
 
 Kết quả test API phải ghi chế độ DATABASE để chứng minh truy vấn PostgreSQL. Các kiểm tra SQL/JSON riêng không thay thế việc thử luồng UI.
@@ -74,4 +79,5 @@ Kết quả test API phải ghi chế độ DATABASE để chứng minh truy v�
 - Bộ test có sẵn: 7/7 đạt ở chế độ DATABASE.
 - Bộ integration bổ sung: kiểm tra 503 khi chưa kết nối, nguồn dữ liệu PostgreSQL, phân trang, tìm tiếng Việt, lọc kết hợp, sắp xếp, dữ liệu NULL và lỗi đầu vào.
 - Kiểm tra lớp gọi API frontend và React render: đạt với metadata, phân trang, bộ lọc, giá/đánh giá NULL, chi tiết, kết quả rỗng, lỗi API và hủy request.
+- Cập nhật thông số/autocomplete: 8/8 kiểm tra backend discovery đạt; kiểm tra tương tác trên DOM mô phỏng đạt (debounce, bàn phím, hủy request, response cũ, đổi danh mục và chips).
 - Chưa xác nhận trực quan bằng browser automation vì browser access host không khả dụng; cần mở trang để rà soát bố cục và thao tác khi demo.

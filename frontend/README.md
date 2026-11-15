@@ -17,9 +17,10 @@ Design reference: [Smart Electronics Store Figma](https://www.figma.com/design/L
 | Feature | Behavior |
 | --- | --- |
 | Keyword search | Submit with Enter or the search button; supports Vietnamese text with or without accents. |
-| Search suggestions | Quickly search for laptop, MacBook, or iPhone. |
+| Search suggestions | Show up to five matching products while typing, starting at two characters with a 250 ms debounce. Suggestions respect the selected category and filters. Support ↑/↓, Enter, Esc, mouse selection, cancellation, and stale-response protection. |
 | Category filter | Categories are loaded from the API. Selecting a category in the top navigation clears the previous search and filters. |
-| Brand filter | Select multiple brands loaded from the API. Brands are combined using OR; different filter types use AND. |
+| Brand filter | Show only brands with active products in the selected category. Changing category clears previous brand/spec selections. Brands are combined using OR; different filter types use AND. |
+| Technical filters | Category-specific RAM, SSD capacity, CPU/chip family, screen size, screen technology, OS, refresh rate, and laptop usage. Only groups and values present in the catalog are shown. |
 | Price filter | Adjust the maximum price or use the 15M, 20M, and 30M VND presets. The slider's upper position means **no price limit**. |
 | Stock filter | Show products with available inventory. Inventory is simulated for the project demo. |
 | Active filters | Remove an individual filter or reset all filters. Resetting filters preserves the submitted keyword. |
@@ -32,7 +33,9 @@ Design reference: [Smart Electronics Store Figma](https://www.figma.com/design/L
 | Image fallback | Use the catalog image when available and a local vector illustration when the image is missing or fails. |
 | Request cancellation | Cancel outdated search/detail requests so an older response does not replace newer results. |
 
-The normal catalog search uses server-side filtering and pagination. The saved-products view retrieves the saved products through the detail API and filters/pages that subset on the client.
+Catalog search and the saved-products view both use server-side filtering and pagination. The saved view passes its session-local product IDs to the API along with the same search/filter criteria.
+
+Technical filters, price and stock availability must match the **same active SKU**. The displayed price and specifications come from the cheapest matching SKU; opening details preserves that SKU while also listing the other configurations. Multiple values in a technical group use OR; groups use AND. Missing technical values do not match a selected filter. Option counts indicate distinct product groups with that value in the selected category, independent of the keyword or other filters. CPU, screen technology and OS options are normalized families rather than full raw descriptions.
 
 ## Technology
 
@@ -121,6 +124,8 @@ All paths below are relative to `VITE_API_URL`.
 | GET | `/health` | Check the backend and identify the data source. |
 | GET | `/categories` | Load category names and codes. |
 | GET | `/brands` | Load available brands. |
+| GET | `/products/filters?category=phone` | Load technical groups, values and model counts for a category. |
+| GET | `/products/suggestions` | Fetch up to five matching product suggestions using the current keyword and filters. |
 | GET | `/products/search` | Search, filter, sort, and paginate products. |
 | GET | `/products/:id` | Load product details and variants. |
 
@@ -136,6 +141,11 @@ Search parameters sent by this screen:
 | `sort` | `relevant`, `asc`, `desc` | Default order or price order. |
 | `page` | `1` | Requested result page. |
 | `limit` | `6` | Products per page. |
+| `ram`, `storage` | `16`, `512,1024` | Selected RAM/storage capacities in GB. |
+| `cpu` | `Intel Core i5` | Normalized CPU/chip family. |
+| `screenSize`, `screenTech` | `14,15.6`, `OLED` | Screen diagonal in inches and technology family. |
+| `os`, `usage`, `refreshRate` | `Windows`, `Gaming`, `144` | OS family, usage, and refresh rate in Hz. |
+| `ids` | `12,45` | Product IDs for the saved-products view; an empty list matches no products. |
 
 The API returns a `data` array and a `pagination` object containing `page`, `pageSize`, `total`, and `totalPages`. The frontend adapter converts API fields such as `image_url` and `review_count` into the view model used by the components.
 
@@ -147,8 +157,11 @@ frontend/
 │   ├── App.tsx                         # Search state, filters, requests, pagination, and detail dialog
 │   ├── main.tsx                        # React entry point
 │   ├── search.css                      # Screen styling and responsive layouts
+│   ├── discovery.css                   # Technical filters and autocomplete dropdown styling
 │   ├── components/
 │   │   ├── ProductCard.tsx             # Product result card
+│   │   ├── SearchBox.tsx               # Debounced, keyboard-accessible autocomplete
+│   │   ├── TechnicalFilters.tsx        # Collapsible category-specific specification groups
 │   │   ├── ProductImage.tsx            # Catalog image with failure fallback
 │   │   ├── ProductArt.tsx              # Local vector device illustrations
 │   │   └── Icon.tsx                    # Shared SVG icons
@@ -158,7 +171,8 @@ frontend/
 │   └── data/
 │       └── mockProducts.ts            # Earlier prototype data; not used by the integrated screen
 ├── scripts/
-│   └── check-search-integration.mjs    # Frontend/API integration and React rendering checks
+│   ├── check-search-integration.mjs    # Frontend/API integration and React rendering checks
+│   └── check-discovery.mjs             # In-memory DOM autocomplete and category/filter interaction checks
 ├── .env.example
 ├── index.html
 └── package.json
@@ -174,6 +188,9 @@ frontend/
 6. Open a product to demonstrate UC16: specifications, configurations, SKU identifiers, and variant availability.
 7. Save a product using the heart button and switch to **Đã lưu**. Existing search filters still apply to the saved list.
 8. Stop the backend, submit another search, and show the error state. Restart the backend and select **Thử lại**.
+9. Switch from laptops to phones: laptop-only brands and usage filters disappear, and incompatible selections are cleared.
+10. Select laptop RAM 16 GB, storage 512 GB and Windows. Check the selected configuration and price in the product details.
+11. Type `ip` in the search bar, wait for suggestions, use arrow keys and Enter to select one. Press Esc to dismiss the dropdown.
 
 For the complete group demo workflow, see the [UC17/UC16 integration guide](../docs/integration/search-demo.md).
 
@@ -184,9 +201,10 @@ From `frontend/`:
 ```powershell
 npm run build
 npm run test:integration
+npm run test:discovery
 ```
 
-The integration check requires the backend and PostgreSQL to be running. It uses the actual frontend API adapter and renders product cards with React, covering metadata, search, server pagination, combined filters, missing values, product details, empty results, errors, and cancellation. It does not automate browser interactions.
+The integration check requires the backend and PostgreSQL to be running. It uses the actual frontend API adapter and renders product cards with React, covering metadata, search, server pagination, combined filters, missing values, product details, empty results, errors, and cancellation. `test:discovery` additionally uses jsdom to exercise autocomplete debounce, keyboard selection, cancellation, stale results and category-specific screen state. These checks do not automate a browser or verify visual layout.
 
 From `backend/`:
 
@@ -194,9 +212,12 @@ From `backend/`:
 npm run build
 npm test
 npm run test:integration
+npm run test:discovery
 ```
 
 Recorded checks on **15 November 2026** passed: frontend/backend builds, 7 existing API tests against PostgreSQL, 7 additional backend integration checks, and the frontend API/rendering check. Automated visual browser verification was unavailable; manually review layout and interactions before presenting.
+
+The technical-filter/autocomplete update also passed 8 backend discovery checks against PostgreSQL and the jsdom interaction checks. Filter structure was informed by the [Phong Vũ laptop catalog](https://phongvu.vn/c/laptop) and [phone catalog](https://phongvu.vn/c/phone-dien-thoai), with options derived from this project's own snapshot.
 
 ## Data and Scope
 
