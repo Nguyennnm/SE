@@ -1,0 +1,3 @@
+-- The new catalog references gallery URLs recorded at crawl time.
+-- No legacy packaged WebP image map is used in this dataset.
+-- Download/rehost images only after reviewing permission and license.
