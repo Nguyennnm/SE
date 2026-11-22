@@ -12,11 +12,13 @@ export function ProductCard({ product: p, saved, onSave, onDetail }: { product: 
     </div>
     <div className="product-content">
       <div className="product-meta"><span>{p.brand}</span><span className={p.stock ? 'available' : 'unavailable'}><i/>{p.stock ? 'Còn hàng' : 'Tạm hết hàng'}</span></div>
-      <h3><button onClick={onDetail}>{p.name}</button></h3>
+      <h3><button onClick={onDetail} title={p.variantName ?? p.name}>{p.variantName ?? p.name}</button></h3>
+      <div className="variant-chips">{[p.ram ? `RAM ${p.ram}GB` : '', p.storage, p.variantColor].filter(Boolean).map((value, i) => <span key={i}>{value}</span>)}</div>
+      {p.selectedSku && <small className="product-sku">SKU: {p.selectedSku}</small>}
       <p className="product-specs">{[p.processor, p.ram ? `${p.ram}GB` : '', p.storage].filter(Boolean).join(' · ')}</p>
       <div className="rating">{p.rating != null && <span>★</span>}<b>{p.rating == null ? 'Chưa có đánh giá' : p.rating.toFixed(1)}</b>{p.reviews != null && <span className="review-count">({p.reviews} đánh giá)</span>}</div>
       <div className="product-price"><strong>{p.price == null ? 'Chưa có giá' : money(p.price)}</strong>{p.originalPrice != null && p.price != null && p.originalPrice > p.price && <del>{money(p.originalPrice)}</del>}</div>
-      <div className="product-bottom"><span>{p.variants.length} cấu hình · Xem chi tiết</span><button aria-label={`Xem chi tiết ${p.name}`} onClick={onDetail}><Icon name="arrow" size={17}/></button></div>
+      <div className="product-bottom"><span>{(p.variantCount ?? p.variants.length) > 1 ? `Xem ${p.variantCount ?? p.variants.length} phiên bản` : 'Xem chi tiết'}</span><button aria-label={`Xem chi tiết ${p.variantName ?? p.name}`} onClick={onDetail}><Icon name="arrow" size={17}/></button></div>
     </div>
   </article>;
 }
