@@ -147,9 +147,13 @@ try {
   assert(document.querySelector('.selected-config').textContent.includes(nextSku));
   assert.equal(document.querySelector('.detail-price').textContent, nextPrice);
   assert.equal(actualCalls.filter(url => /\/products\/\d+$/.test(url)).length, detailCalls);
-  await act(async () => document.querySelector('.dialog-close').click());
-  assert(!document.querySelector('dialog').open);
-  console.log('PASS variants: separate SKU cards, exact detail selection, image/price consistency and switching configurations.');
+  assert(window.location.hash.includes(encodeURIComponent(nextSku)), 'URL giữ SKU đang chọn');
+  assert(document.querySelector('.pdp-tabs'), 'Trang chi tiết có tab mô tả / thông số');
+  await act(async () => document.querySelector('.pdp-tabs [role=tab]').click());
+  assert(document.querySelector('.pdp-specs table'), 'Bảng thông số hiển thị');
+  await act(async () => document.querySelector('.detail-back').click());
+  await until(() => !document.querySelector('.pdp') && document.querySelector('.product-results'));
+  console.log('PASS variants: separate SKU cards, exact detail page selection, image/price consistency, switching configurations and back to results.');
 } finally {
   await act(async () => root.unmount());
   globalThis.fetch = originalFetch;

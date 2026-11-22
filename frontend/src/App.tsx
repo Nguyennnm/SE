@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { searchProducts, getProduct, selectProductVariant, getCategories, getBrands, getTechnicalFilters, getPriceRange, getDataSource, specKeys, type SpecSelection, type SpecKey, type FacetGroup, type SearchParams, type Product, type Category } from './services/productApi';
-import { ProductDetails } from './components/ProductDetails';
+import { searchProducts, getCategories, getBrands, getTechnicalFilters, getPriceRange, getDataSource, specKeys, type SpecSelection, type SpecKey, type FacetGroup, type SearchParams, type Product, type Category } from './services/productApi';
+import { ProductPage } from './components/ProductPage';
 import { ProductCard } from './components/ProductCard';
 import { SearchBox } from './components/SearchBox';
 import { TechnicalFilters } from './components/TechnicalFilters';
@@ -11,6 +11,14 @@ import { ProductArt } from './components/ProductArt';
 
 const money = (n: number | null) => n == null ? 'Chưa có giá' : new Intl.NumberFormat('vi-VN').format(n) + '₫';
 const pageSize = 6;
+
+// Đường dẫn trang chi tiết: #/san-pham/<id>?sku=<sku>
+type ProductRoute = { productId: string; sku?: string } | null;
+const parseRoute = (): ProductRoute => {
+  const match = (typeof window === 'undefined' ? '' : window.location.hash).match(/^#\/san-pham\/([^?]+)(?:\?sku=(.+))?$/);
+  return match ? { productId: decodeURIComponent(match[1]), sku: match[2] ? decodeURIComponent(match[2]) : undefined } : null;
+};
+const routeHash = (id: string, sku?: string) => `#/san-pham/${encodeURIComponent(id)}${sku ? `?sku=${encodeURIComponent(sku)}` : ''}`;
 
 export default function App() {
   const [draft, setDraft] = useState('laptop');
@@ -27,8 +35,10 @@ export default function App() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [savedOnly, setSavedOnly] = useState(false);
   const [saved, setSaved] = useState<string[]>([]);
-  const [detail, setDetail] = useState<Product | null>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
+  const [route, setRoute] = useState<ProductRoute>(parseRoute);
+  const [toast, setToast] = useState('');
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const openedFromList = useRef(false);
 
   const [items, setItems] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
@@ -43,11 +53,6 @@ export default function App() {
   const [facetGroups, setFacetGroups] = useState<FacetGroup[]>([]);
   const [facetLoading, setFacetLoading] = useState(true);
   const [facetError, setFacetError] = useState('');
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState('');
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const detailRequest = useRef<AbortController | null>(null);
-  const detailSku = useRef<string | undefined>(undefined);
   const categories = ['Tất cả', ...categoryOptions.map(c => c.name)];
   const categoryCode = categoryOptions.find(c => c.name === category)?.code ?? category;
   const priceFilterActive = maxPrice !== null && (priceCeiling === null || maxPrice < priceCeiling);
@@ -94,18 +99,34 @@ export default function App() {
     return () => controller.abort();
   }, [criteriaKey, retry]);
 
-  useEffect(() => () => detailRequest.current?.abort(), []);
-  const closeDetail = () => { detailRequest.current?.abort(); dialog.current?.close(); setDetail(null); setDetailId(null); };
-  const openDetail = async (id: string, preferredSku?: string) => {
-    detailSku.current = preferredSku;
-    detailRequest.current?.abort();
-    const controller = new AbortController();
-    detailRequest.current = controller;
-    setDetailId(id); setDetail(null); setDetailError(''); setDetailLoading(true);
-    dialog.current?.showModal();
-    try { const product = await getProduct(id, controller.signal, preferredSku); if (!controller.signal.aborted) setDetail(product); }
-    catch (err) { if (!controller.signal.aborted) setDetailError(err instanceof Error ? err.message : 'Không tải được chi tiết sản phẩm.'); }
-    finally { if (!controller.signal.aborted) setDetailLoading(false); }
+  useEffect(() => {
+    const onHash = () => setRoute(parseRoute());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  const showToast = (message: string) => { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 3500); };
+  const openDetail = (id: string, sku?: string) => {
+    openedFromList.current = route === null || openedFromList.current;
+    window.location.hash = routeHash(id, sku);
+    setRoute({ productId: id, sku });
+  };
+  const closeDetail = () => {
+    if (openedFromList.current && window.history.length > 1) window.history.back();
+    else window.location.hash = '';
+    openedFromList.current = false;
+    setRoute(null);
+  };
+  const changeDetailSku = (sku: string) => {
+    if (!route) return;
+    window.history.replaceState(null, '', routeHash(route.productId, sku));
+    setRoute({ productId: route.productId, sku });
+  };
+  // Điểm nối với giỏ hàng (UC19): phát sự kiện để màn giỏ hàng lắng nghe và thêm đúng SKU.
+  const addToCart = (product: Product, quantity: number, buyNow: boolean) => {
+    const detail = { productId: product.id, sku: product.selectedSku, name: product.variantName ?? product.name, unitPrice: product.price, quantity };
+    window.dispatchEvent(new CustomEvent(buyNow ? 'techstore:buy-now' : 'techstore:add-to-cart', { detail }));
+    showToast(buyNow ? `Đã chọn ${quantity} × ${detail.name} để mua ngay.` : `Đã thêm ${quantity} × ${detail.name} vào giỏ hàng.`);
   };
   const reset = () => { setSpecs({}); setCategory('Tất cả'); setBrands([]); setMaxPrice(null); setInStock(false); setSavedOnly(false); setPage(1); };
   const changeCategory = (value: string) => { setCategory(value); setBrands([]); setSpecs({}); setBrandOptions([]); setFacetGroups([]); setPage(1); };
@@ -123,6 +144,7 @@ export default function App() {
     </div></header>
     <nav className="category-nav" aria-label="Danh mục"><div className="container nav-inner">{categories.map((c, i) => <button key={c} className={category === c ? 'nav-active' : ''} onClick={() => { reset(); setCategory(c); search(''); }}>{i === 0 && <Icon name="grid" size={16}/>} {c === 'Tất cả' ? 'Tất cả danh mục' : c}</button>)}<span className="nav-help"><Icon name="shield" size={15}/> An tâm chọn công nghệ</span></div></nav>
     <main className="container">
+      {route ? <ProductPage productId={route.productId} sku={route.sku} saved={id => saved.includes(id)} onSave={toggleSaved} onSkuChange={changeDetailSku} onOpenProduct={openDetail} onBack={closeDetail} onCategory={name => { closeDetail(); reset(); changeCategory(name); search(''); }} onAddToCart={addToCart}/> : <>
       <div className="breadcrumb"><a href="#" onClick={() => { reset(); search(''); }}>Trang chủ</a><Icon name="chevron" size={12}/><span>Tìm kiếm sản phẩm</span></div>
       <section className="campaign"><div className="campaign-copy"><span className="campaign-label"><span/> TECHNOLOGY FOR EVERYDAY</span><h1>Công nghệ đúng gu.<br/><span>Hiệu năng đúng nhu cầu.</span></h1><p>Từ góc học tập đến bàn làm việc, tìm thiết bị dành riêng cho bạn.</p><button onClick={() => { reset(); search(''); }}>Khám phá bộ sưu tập <Icon name="arrow" size={17}/></button></div><div className="campaign-art"><span className="orbit orbit-one"/><span className="orbit orbit-two"/><ProductArt color="#79a7f2" name="Laptop"/><div className="floating-tag"><Icon name="spark" size={16}/><span>Cho mọi ý tưởng lớn</span></div></div><span className="campaign-index">01 / EVERYDAY ESSENTIALS</span></section>
       <section className="search-results" aria-labelledby="results-title">
@@ -141,14 +163,15 @@ export default function App() {
           <div className="results-body"><div className="results-toolbar"><span className="desktop-result-label">Tìm thấy <b>{total} phiên bản</b> phù hợp</span><button className="mobile-filter-button" onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen}><Icon name="filter" size={17}/>Bộ lọc {filterCount > 0 && `(${filterCount})`}</button><div className="toolbar-right"><label>Sắp xếp:<select aria-label="Sắp xếp sản phẩm" value={sort} onChange={e => { setSort(e.target.value); setPage(1); }}><option value="relevant">Phù hợp nhất</option><option value="asc">Giá thấp đến cao</option><option value="desc">Giá cao đến thấp</option></select></label><div className="view-toggle"><button aria-label="Hiển thị dạng lưới" aria-pressed={view === 'grid'} onClick={() => setView('grid')}><Icon name="grid" size={17}/></button><button aria-label="Hiển thị dạng danh sách" aria-pressed={view === 'list'} onClick={() => setView('list')}><Icon name="list" size={18}/></button></div></div></div>
             {(filterCount > 0 || savedOnly) && <div className="active-filters">{specKeys.flatMap(key => (specs[key] ?? []).map(value => <button key={`${key}-${value}`} onClick={() => toggleSpec(key, value)}>{facetGroups.find(g => g.key === key)?.label}: {facetGroups.find(g => g.key === key)?.options.find(o => o.value === value)?.label ?? value}<Icon name="close" size={12}/></button>))}{category !== 'Tất cả' && <button onClick={() => setCategory('Tất cả')}>{category}<Icon name="close" size={12}/></button>}{brands.map(b => <button key={b} onClick={() => setBrands(brands.filter(x => x !== b))}>{b}<Icon name="close" size={12}/></button>)}{priceFilterActive && <button onClick={() => setMaxPrice(null)}>Đến {money(maxPrice)}<Icon name="close" size={12}/></button>}{inStock && <button onClick={() => setInStock(false)}>Còn hàng<Icon name="close" size={12}/></button>}{savedOnly && <button onClick={() => setSavedOnly(false)}>Đã lưu<Icon name="close" size={12}/></button>}</div>}
             <div aria-live="polite" className="sr-only">Có {total} phiên bản phù hợp.</div>
-            {loading ? <div className="no-results" role="status"><span className="loading-spinner"/><p>Đang tìm sản phẩm...</p></div> : error ? <div className="no-results" role="alert"><Icon name="return" size={30}/><h3>Chưa tải được sản phẩm</h3><p>{error}</p><button className="primary-btn" onClick={() => setRetry(n => n + 1)}>Thử lại</button></div> : visible.length ? <div className={`product-results ${view === 'list' ? 'list-view' : ''}`}>{visible.map(p => <ProductCard key={`${p.id}:${p.selectedSku ?? p.id}`} product={p} saved={saved.includes(p.id)} onSave={() => toggleSaved(p.id)} onDetail={() => void openDetail(p.id, p.variants[0]?.sku)}/>)}</div> : <div className="no-results"><div><Icon name="search" size={34}/></div><h3>Chưa tìm thấy sản phẩm phù hợp</h3><p>Thử từ khóa ngắn hơn hoặc bỏ bớt bộ lọc để có thêm lựa chọn.</p><button className="primary-btn" onClick={() => { reset(); search(''); }}>Xem tất cả sản phẩm<Icon name="arrow" size={16}/></button></div>}
+            {loading ? <div className="no-results" role="status"><span className="loading-spinner"/><p>Đang tìm sản phẩm...</p></div> : error ? <div className="no-results" role="alert"><Icon name="return" size={30}/><h3>Chưa tải được sản phẩm</h3><p>{error}</p><button className="primary-btn" onClick={() => setRetry(n => n + 1)}>Thử lại</button></div> : visible.length ? <div className={`product-results ${view === 'list' ? 'list-view' : ''}`}>{visible.map(p => <ProductCard key={`${p.id}:${p.selectedSku ?? p.id}`} product={p} saved={saved.includes(p.id)} onSave={() => toggleSaved(p.id)} onDetail={() => openDetail(p.id, p.variants[0]?.sku ?? p.selectedSku)}/>)}</div> : <div className="no-results"><div><Icon name="search" size={34}/></div><h3>Chưa tìm thấy sản phẩm phù hợp</h3><p>Thử từ khóa ngắn hơn hoặc bỏ bớt bộ lọc để có thêm lựa chọn.</p><button className="primary-btn" onClick={() => { reset(); search(''); }}>Xem tất cả sản phẩm<Icon name="arrow" size={16}/></button></div>}
             {!loading && !error && total > 0 && <div className="pagination"><span>Hiển thị {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, total)} trong {total} phiên bản</span><div><button disabled={currentPage === 1} aria-label="Trang trước" onClick={() => setPage(currentPage - 1)}><Icon name="chevron" size={15} style={{ transform: 'rotate(180deg)' }}/></button>{Array.from(new Set([1, ...Array.from({ length: 3 }, (_, i) => currentPage - 1 + i).filter(n => n > 1 && n < pages), pages])).sort((a, b) => a - b).map((n, i, all) => <span className="page-entry" key={n}>{i > 0 && n - all[i - 1] > 1 && <span className="page-gap">…</span>}<button aria-label={`Trang ${n}`} aria-current={currentPage === n ? 'page' : undefined} onClick={() => setPage(n)}>{n}</button></span>)}<button disabled={currentPage === pages} aria-label="Trang sau" onClick={() => setPage(currentPage + 1)}><Icon name="chevron" size={15}/></button></div></div>}
           </div>
         </div>
       </section>
+      </>}
       <section className="service-strip">{[['shield', 'Chính hãng 100%', 'An tâm về nguồn gốc'], ['truck', 'Giao hàng nhanh', 'Đồng hành mọi nơi'], ['return', 'Đổi trả thuận tiện', 'Hỗ trợ theo chính sách'], ['headphones', 'Tư vấn tận tâm', 'Lựa chọn cùng chuyên gia']].map(([icon, title, text]) => <div key={icon}><Icon name={icon} size={25}/><span><b>{title}</b><small>{text}</small></span></div>)}</section>
     </main>
     <footer className="site-footer container"><div><a href="#" className="footer-logo">TechStore<span>.</span></a><p>Chọn công nghệ tốt, sống tiện nghi hơn.</p></div><span>Giá theo snapshot catalog · Tồn kho mô phỏng</span><small>© 2026 TechStore</small></footer>
-    <dialog ref={dialog} className="product-dialog" onCancel={closeDetail} onClick={e => { if (e.target === e.currentTarget) { closeDetail(); } }}> {(detailLoading || detailError) && <div className="detail-status"><button className="dialog-close" aria-label="Đóng thông tin sản phẩm" onClick={closeDetail}><Icon name="close"/></button>{detailLoading ? <><span className="loading-spinner"/><p>Đang tải thông tin sản phẩm...</p></> : <><h3>Chưa tải được chi tiết</h3><p role="alert">{detailError}</p><button className="primary-btn" onClick={() => detailId && void openDetail(detailId, detailSku.current)}>Thử lại</button></>}</div>}{detail && <ProductDetails product={detail} saved={saved.includes(detail.id)} onSave={() => toggleSaved(detail.id)} onClose={closeDetail} onSelect={sku => setDetail(current => current ? selectProductVariant(current, sku) : current)}/>}</dialog>
+    {toast && <div className="toast" role="status"><Icon name="cart" size={18}/>{toast}</div>}
   </div>;
 }
