@@ -50,7 +50,7 @@ END $$;
 \echo '== Transactional test: pending / confirmed / completed / cancelled =='
 -- Changes below are temporary and always ROLLBACK (no permanent test orders).
 BEGIN;
-DO $
+DO $$
 DECLARE
     test_variant_id BIGINT;
     test_product_id BIGINT;
@@ -107,7 +107,7 @@ BEGIN
     IF actual <> baseline THEN
         RAISE EXCEPTION 'Cancelled must not count: expected %, got %', baseline, actual;
     END IF;
-END $;
+END $$;
 ROLLBACK;
 \echo 'Order lifecycle checks passed (test data rolled back).'
 \echo 'Best-selling database checks finished.'
