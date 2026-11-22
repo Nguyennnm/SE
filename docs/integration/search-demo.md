@@ -81,3 +81,7 @@ Kết quả test API phải ghi chế độ DATABASE để chứng minh truy v�
 - Kiểm tra lớp gọi API frontend và React render: đạt với metadata, phân trang, bộ lọc, giá/đánh giá NULL, chi tiết, kết quả rỗng, lỗi API và hủy request.
 - Cập nhật thông số/autocomplete: 8/8 kiểm tra backend discovery đạt; kiểm tra tương tác trên DOM mô phỏng đạt (debounce, bàn phím, hủy request, response cũ, đổi danh mục và chips).
 - Chưa xác nhận trực quan bằng browser automation vì browser access host không khả dụng; cần mở trang để rà soát bố cục và thao tác khi demo.
+
+## Cập nhật phiên bản — 22/11/2026
+
+Màn hình hiện hiển thị từng SKU thành một ô riêng; phân trang và tổng số tính theo SKU. Bấm ô nào sẽ chọn đúng SKU đó trong chi tiết, sau đó có thể đổi phiên bản để xem giá/thông số/ảnh/tồn kho tương ứng. Dữ liệu sau sửa hãng và nhóm model: 365 model, vẫn đủ 703 SKU và 4.775 ảnh. Xem [hợp đồng API, migration và kiểm thử](product-variants.md).

@@ -34,13 +34,13 @@ Bộ dữ liệu cũ (snapshot 1.241 SKU, tập 338 SKU được gắn nhãn 202
 
 | Thành phần sau import | Số lượng |
 |---|---:|
-| Nhóm sản phẩm (`products`) | 368 |
+| Nhóm sản phẩm (`products`) | 365 |
 | Biến thể/SKU (`product_variants`) | 703 |
 | Ảnh theo SKU (`product_images`) | 4.775 |
 | Bản ghi tồn kho mô phỏng (`inventory_items`) | 703 |
 | SKU đủ điều kiện thêm giỏ demo (có giá và tồn kho) | 559 |
 
-**Lưu ý:** 368 nhóm sản phẩm là kết quả **suy luận theo tên sản phẩm bán lẻ**, không phải phân nhóm chính thức được nhà sản xuất xác nhận. Khi xây màn hình lựa chọn màu/RAM/dung lượng, cần rà soát nhóm và các SKU cùng model.
+**Lưu ý:** 365 nhóm sản phẩm là kết quả **suy luận theo tên sản phẩm bán lẻ**, không phải phân nhóm chính thức được nhà sản xuất xác nhận. Đã sửa 51 SKU nhận nhầm hãng do phần mềm Microsoft đi kèm và gộp 3 nhóm bị tách nhầm. Xem [cập nhật phiên bản và migration 006](../integration/product-variants.md).
 
 ### Các trường thiếu là hợp lệ
 
@@ -63,7 +63,7 @@ phongvu_catalog_snapshot (seller_sku duy nhất)
                |
                +--> categories / brands
                |         |
-               +--> products (368 nhóm sản phẩm suy luận)
+               +--> products (365 nhóm sản phẩm suy luận)
                           |
                           +--> product_variants (703 SKU, PV-{seller_sku})
                           |       |-- specifications JSONB
@@ -192,7 +192,7 @@ docker exec ses-phongvu-pa4-db psql -U ses_user -d smart_electronics_store -c "S
 docker exec ses-phongvu-pa4-db psql -U ses_user -d smart_electronics_store -c "SELECT (SELECT COUNT(*) FROM products) AS products, (SELECT COUNT(*) FROM product_variants) AS variants, (SELECT COUNT(*) FROM product_images) AS images, (SELECT COUNT(*) FROM inventory_items) AS inventory_rows;"
 ```
 
-Cần đối chiếu `703` SKU, `368` nhóm model, `703` biến thể, `4.775` ảnh và `703` tồn kho. Nếu kết quả khác, **chưa nên merge vào `main`** trước khi giải thích được nguyên nhân.
+Cần đối chiếu `703` SKU, `365` nhóm model, `703` biến thể, `4.775` ảnh và `703` tồn kho. Nếu kết quả khác, **chưa nên merge vào `main`** trước khi giải thích được nguyên nhân.
 
 ### Kiểm tra 3 use case
 

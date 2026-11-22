@@ -20,22 +20,29 @@ Design reference: [Smart Electronics Store Figma](https://www.figma.com/design/L
 | Search suggestions | Show up to five matching products while typing, starting at two characters with a 250 ms debounce. Suggestions respect the selected category and filters. Support ↑/↓, Enter, Esc, mouse selection, cancellation, and stale-response protection. |
 | Category filter | Categories are loaded from the API. Selecting a category in the top navigation clears the previous search and filters. |
 | Brand filter | Show only brands with active products in the selected category. Changing category clears previous brand/spec selections. Brands are combined using OR; different filter types use AND. |
-| Technical filters | Category-specific RAM, SSD capacity, CPU/chip family, screen size, screen technology, OS, refresh rate, and laptop usage. Only groups and values present in the catalog are shown. |
-| Price filter | Adjust the maximum price or use the 15M, 20M, and 30M VND presets. The slider's upper position means **no price limit**. |
+| Technical filters | Category-specific RAM, SSD capacity for laptops / internal storage for phones and tablets, CPU/chip family, screen size, screen technology, OS, refresh rate, and laptop usage. Only groups and values present in the catalog are shown. |
+| Price filter | The slider starts at 0 VND and ends at the actual highest selling price among active catalog SKUs, loaded from the API. Presets are shown only when within that range. |
 | Stock filter | Show products with available inventory. Inventory is simulated for the project demo. |
 | Active filters | Remove an individual filter or reset all filters. Resetting filters preserves the submitted keyword. |
 | Sorting | Default order, ascending price, or descending price. The current backend default order is descending product ID. |
-| Pagination | Six products per page; total counts and regular search pages come from the API. |
+| Pagination | Six SKU variants per page; total counts, ordering and pagination are calculated by the API before rendering. |
 | Grid/list views | Switch the presentation without changing the search criteria. |
 | Saved products | Save or unsave a product and view the saved list. Saved IDs are held in React state and reset on page reload. |
-| Product details | Fetch product information, specifications, configurations, SKU identifiers, and variant prices/stock. |
+| Product variants | Each active SKU has its own result card with the full configuration name, RAM/storage/color when known, SKU, exact selling price and available stock. Model names may repeat across cards. |
+| Product details | Open the clicked card's SKU, then choose another configuration. Price, specifications, image and availability update together. Unpriced variants remain selectable and show **Chưa có giá**. |
 | Loading and errors | Show loading feedback, empty results, connection errors, and a retry action. |
 | Image fallback | Use the catalog image when available and a local vector illustration when the image is missing or fails. |
 | Request cancellation | Cancel outdated search/detail requests so an older response does not replace newer results. |
 
 Catalog search and the saved-products view both use server-side filtering and pagination. The saved view passes its session-local product IDs to the API along with the same search/filter criteria.
 
-Technical filters, price and stock availability must match the **same active SKU**. The displayed price and specifications come from the cheapest matching SKU; opening details preserves that SKU while also listing the other configurations. Multiple values in a technical group use OR; groups use AND. Missing technical values do not match a selected filter. Option counts indicate distinct product groups with that value in the selected category, independent of the keyword or other filters. CPU, screen technology and OS options are normalized families rather than full raw descriptions.
+Technical filters, keyword, price and stock availability must match the **same active SKU**. The frontend requests `groupBy=variant` for search, suggestions and technical filter counts. Cards are keyed by product ID and SKU, so two configurations of one model remain separate results. Opening details preserves the clicked SKU; the selector lists all active variants of that model, including configurations outside the current search filters. Multiple values in a technical group use OR; groups use AND. Missing technical values do not match a selected filter. Option counts indicate active SKUs with that value in the selected category, independent of the keyword or other filters. CPU, screen technology and OS options are normalized families rather than full raw descriptions.
+
+The API retains its default `groupBy=product` behavior for existing consumers. Product IDs still identify model families; saving is at model level, so all configurations of a saved model appear in the saved view. Each configuration displays its own SKU. Variant-specific images and specifications are used when available; missing fields are not copied from a sibling SKU.
+
+See [variant search and catalog migration](../docs/integration/product-variants.md) for the API contract, database upgrade and dedicated checks. The local development database has already received migration 006; other existing installations should apply that migration after a backup.
+
+Storage is labeled **Dung lượng SSD** for laptops, **Bộ nhớ trong** for phones/tablets, and **Dung lượng lưu trữ** when all categories are selected. See the [P2 filter quality audit](../docs/integration/filter-quality.md) for measured coverage and limitations; run `npm run audit:filters` in `backend/` to repeat the read-only check.
 
 ## Technology
 
@@ -124,9 +131,10 @@ All paths below are relative to `VITE_API_URL`.
 | GET | `/health` | Check the backend and identify the data source. |
 | GET | `/categories` | Load category names and codes. |
 | GET | `/brands` | Load available brands. |
-| GET | `/products/filters?category=phone` | Load technical groups, values and model counts for a category. |
+| GET | `/products/price-range` | Get `{ min: 0, max }` for the full active catalog; unknown prices are ignored. |
+| GET | `/products/filters?category=phone&groupBy=variant` | Load technical groups, values and SKU counts for a category. |
 | GET | `/products/suggestions` | Fetch up to five matching product suggestions using the current keyword and filters. |
-| GET | `/products/search` | Search, filter, sort, and paginate products. |
+| GET | `/products/search?groupBy=variant` | Search, filter, sort, and paginate individual SKUs. Omit `groupBy` to retain model grouping. |
 | GET | `/products/:id` | Load product details and variants. |
 
 Search parameters sent by this screen:
@@ -185,7 +193,7 @@ frontend/
 3. Search for `laptop`, sort by ascending price, and move to the next page.
 4. Search for a nonexistent keyword to demonstrate the empty-results state.
 5. Clear the keyword, reset filters, and select tablets to show products with missing prices.
-6. Open a product to demonstrate UC16: specifications, configurations, SKU identifiers, and variant availability.
+6. Open two cards of the same model with different SKUs. Each dialog must select the clicked SKU and match the card's price/image. Choose another configuration and verify the selected SKU, price, specifications and availability update together.
 7. Save a product using the heart button and switch to **Đã lưu**. Existing search filters still apply to the saved list.
 8. Stop the backend, submit another search, and show the error state. Restart the backend and select **Thử lại**.
 9. Switch from laptops to phones: laptop-only brands and usage filters disappear, and incompatible selections are cleared.
@@ -221,10 +229,10 @@ The technical-filter/autocomplete update also passed 8 backend discovery checks 
 
 ## Data and Scope
 
-- The imported snapshot contains 368 product groups and 703 SKUs across laptops, phones, and tablets. Displayed search counts refer to product groups, not individual SKUs.
+- The corrected snapshot contains 365 model groups and 703 SKUs across laptops, phones, and tablets. Displayed search counts refer to matching SKUs. The brand parser now ignores bundled Microsoft software when identifying the hardware brand; 51 affected SKUs were corrected and three accidentally split model families were merged.
 - Catalog prices are historical snapshot values; inventory is simulated for the course project.
 - A missing price is displayed as **Chưa có giá**. Missing ratings are displayed as **Chưa có đánh giá**.
-- Price filtering excludes products without a price. With no price limit, those products can appear in results.
+- At the full slider range, no explicit price constraint is sent, so products without a price may still appear. Selecting a lower maximum applies a price filter and excludes unknown prices. The upper bound is global to the active catalog, independent of the current keyword, category, filters or result page. An unpriced/empty catalog disables the slider instead of inventing a maximum.
 - Product images use catalog URLs, with local vector fallbacks if those URLs fail.
 - Saving products is temporary and does not create an account or persist a wishlist.
 - This screen implements product discovery and read-only details; checkout and inventory updates are outside its current scope.
