@@ -50,16 +50,19 @@ NORMAL_BRANDS = {'Asus': 'ASUS', 'Msi': 'MSI', 'Honor': 'HONOR', 'Oppo': 'OPPO',
 
 
 def brand_from_name(name):
+    # Match the first hardware brand/family in the title, before the config.
+    # Bundled "Office + Microsoft" must not turn a Lenovo/Dell into Microsoft.
+    title = name.split('(', 1)[0]
+    candidates = []
     for brand in KNOWN_BRANDS:
-        if re.search(r'(?<!\w)' + re.escape(brand) + r'(?!\w)', name, flags=re.I):
-            return NORMAL_BRANDS.get(brand, brand)
-    if re.search(r'\b(?:MacBook|iPhone|iPad)\b', name, re.I):
-        return 'Apple'
-    if re.search(r'\bGalaxy\b', name, re.I):
-        return 'Samsung'
-    if re.search(r'\bRedmi\b', name, re.I):
-        return 'Xiaomi'
-    return 'Chưa xác định'
+        match = re.search(r'(?<!\w)' + re.escape(brand) + r'(?!\w)', title, flags=re.I)
+        if match:
+            candidates.append((match.start(), NORMAL_BRANDS.get(brand, brand)))
+    for pattern, brand in [(r'\b(?:MacBook|iPhone|iPad)\b', 'Apple'), (r'\bGalaxy\b', 'Samsung'), (r'\bRedmi\b', 'Xiaomi')]:
+        match = re.search(pattern, title, re.I)
+        if match:
+            candidates.append((match.start(), brand))
+    return min(candidates)[1] if candidates else 'Chưa xác định'
 
 
 def infer_model_group(category, brand, name, sku):

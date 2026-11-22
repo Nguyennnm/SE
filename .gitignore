@@ -4,6 +4,8 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 
 # Local environment variables; keep templates tracked
 .env
