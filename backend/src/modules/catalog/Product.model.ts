@@ -2,6 +2,7 @@ import type { SpecSelection } from './product.facets.js';
 
 export interface ProductImage {
   id?: number | string;
+  variant_id?: number | string | null;
   image_url: string;
   alt_text?: string;
   is_primary?: boolean;
@@ -23,6 +24,8 @@ export interface ProductVariant {
 
 export interface Product {
   id: string | number;
+  selected_variant_id?: number | string;
+  variant_count?: number;
   code?: string;
   slug: string;
   model_name: string;
@@ -49,6 +52,7 @@ export interface Product {
 }
 
 export interface ProductSearchParams extends SpecSelection {
+  groupBy?: 'product' | 'variant';
   ids?: string[];
   q?: string;
   category?: string;

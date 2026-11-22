@@ -4,6 +4,12 @@ import { specKeys } from './product.facets.js';
 
 export function validateSearchParams(query: Record<string, any>): ProductSearchParams {
   const params: ProductSearchParams = {};
+  if (query.groupBy !== undefined) {
+    if (query.groupBy !== 'product' && query.groupBy !== 'variant') {
+      throw new AppError('groupBy phải là product hoặc variant.', 400, 'INVALID_GROUP_BY');
+    }
+    params.groupBy = query.groupBy;
+  }
 
   // 1. Keyword search (q)
   if (query.q !== undefined && query.q !== null) {

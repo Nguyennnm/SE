@@ -4,10 +4,15 @@ import { validateSearchParams } from './product.validation.js';
 import { successResponse } from '../../shared/response.js';
 
 export class ProductController {
+  async getPriceRange(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    try { res.json(successResponse(await productService.getPriceRange())); }
+    catch (error) { next(error); }
+  }
   async getTechnicalFilters(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const category = typeof req.query.category === 'string' ? req.query.category : undefined;
-      res.json(successResponse(await productService.getTechnicalFilters(category), 'Thông số lọc theo danh mục'));
+      const { groupBy } = validateSearchParams({ groupBy: req.query.groupBy });
+      res.json(successResponse(await productService.getTechnicalFilters(category, groupBy), 'Thông số lọc theo danh mục'));
     } catch (error) { next(error); }
   }
 

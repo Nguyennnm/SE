@@ -42,7 +42,7 @@ function requireMockMode(): void {
  */
 const searchCte = (conditions: string[]) => `
 WITH eligible_variants AS (
-  SELECT v.*, GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0) AS available
+  SELECT v.*, v.id AS variant_id, GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0) AS available
   FROM product_variants v
   LEFT JOIN inventory_items i ON i.variant_id = v.id
   WHERE ${conditions.join(' AND ')}
@@ -107,6 +107,10 @@ export class ProductService {
     if (params.inStock) variantConditions.push('COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0) > 0');
     const cte = searchCte(variantConditions);
     const variantValues = [...values];
+    const byVariant = params.groupBy === 'variant';
+    const variantJoin = byVariant
+      ? 'JOIN eligible_variants rv ON rv.product_id = p.id'
+      : 'LEFT JOIN rep_variant rv ON rv.product_id = p.id';
     whereConditions.push('rv.variant_id IS NOT NULL');
     if (params.ids) {
       whereConditions.push(`p.id::text = ANY($${paramIndex++}::text[])`);
@@ -123,8 +127,9 @@ export class ProductService {
         `(${stripAccents('p.model_name')} LIKE ${like} ` +
           `OR ${stripAccents('b.name')} LIKE ${like} ` +
           `OR ${stripAccents('c.name')} LIKE ${like} ` +
-          `OR EXISTS (SELECT 1 FROM eligible_variants v2 WHERE v2.product_id = p.id ` +
-          `AND ${stripAccents('v2.variant_name')} LIKE ${like}))`
+          (byVariant
+            ? `OR ${stripAccents('rv.variant_name')} LIKE ${like} OR ${stripAccents('rv.sku')} LIKE ${like})`
+            : `OR EXISTS (SELECT 1 FROM eligible_variants v2 WHERE v2.product_id = p.id AND ${stripAccents('v2.variant_name')} LIKE ${like}))`)
       );
       values.push(kw);
       paramIndex++;
@@ -167,14 +172,17 @@ export class ProductService {
       orderBy = 'p.id DESC';
     }
 
-    // Đếm tổng số lượng bản ghi thỏa mãn (dùng đúng CTE + WHERE như truy vấn dữ liệu)
+    // A stable SKU tie-breaker prevents duplicates between variant pages.
+    if (byVariant) orderBy += ', rv.variant_id ASC';
+
+    // Count the same unit (model or SKU) that is paginated below.
     const countSql = `
       ${cte}
       SELECT COUNT(*) as total
       FROM products p
       JOIN categories c ON c.id = p.category_id
       JOIN brands b ON b.id = p.brand_id
-      LEFT JOIN rep_variant rv ON rv.product_id = p.id
+      ${variantJoin}
       LEFT JOIN variant_stats vs ON vs.product_id = p.id
       ${whereClause}
     `;
@@ -189,6 +197,8 @@ export class ProductService {
       ${cte}
       SELECT
         p.id,
+        ${byVariant ? 'rv.variant_id' : 'NULL::bigint'} AS selected_variant_id,
+        (SELECT COUNT(*)::integer FROM product_variants av WHERE av.product_id = p.id AND av.is_active) AS variant_count,
         p.slug,
         p.model_name,
         p.model_name as name,
@@ -197,7 +207,7 @@ export class ProductService {
         b.name as brand,
         rv.selling_price_vnd as price,
         rv.selling_price_vnd as selling_price_vnd,
-        COALESCE(vs.total_available, 0) as stock,
+        ${byVariant ? 'rv.available' : 'COALESCE(vs.total_available, 0)'} as stock,
         NULL::double precision as rating,
         NULL::integer as review_count,
         p.is_active,
@@ -205,11 +215,13 @@ export class ProductService {
         p.short_description,
         p.description,
         p.warranty_months,
-        (SELECT image_url FROM product_images img WHERE img.product_id = p.id AND img.is_primary = TRUE LIMIT 1) as image_url
+        (SELECT image_url FROM product_images img WHERE img.product_id = p.id
+          AND (img.variant_id = rv.variant_id OR img.variant_id IS NULL)
+          ORDER BY (img.variant_id = rv.variant_id) DESC NULLS LAST, img.is_primary DESC, img.display_order, img.id LIMIT 1) as image_url
       FROM products p
       JOIN categories c ON c.id = p.category_id
       JOIN brands b ON b.id = p.brand_id
-      LEFT JOIN rep_variant rv ON rv.product_id = p.id
+      ${variantJoin}
       LEFT JOIN variant_stats vs ON vs.product_id = p.id
       ${whereClause}
       ORDER BY ${orderBy}
@@ -242,7 +254,8 @@ export class ProductService {
         byProduct.set(v.product_id, arr);
       }
       for (const item of items) {
-        item.variants = byProduct.get(Number(item.id)) ?? [];
+        const variants = byProduct.get(Number(item.id)) ?? [];
+        item.variants = byVariant ? variants.filter(v => Number(v.id) === Number(item.selected_variant_id)) : variants;
       }
     }
 
@@ -265,6 +278,10 @@ export class ProductService {
     offset: number
   ): ProductSearchResult {
     let filtered = [...MOCK_TEST_PRODUCTS];
+    if (params.groupBy === 'variant') {
+      filtered = filtered.flatMap(p => (p.variants?.length ? p.variants : [{ sku: String(p.id), variant_name: p.name, price_vnd: p.price, selling_price_vnd: p.price, stock: p.stock, is_active: p.is_active, specifications: p.specifications }])
+        .filter(v => v.is_active).map(v => ({ ...p, name: v.variant_name, variants: [v], variant_count: p.variants?.length ?? 1, price: v.selling_price_vnd ?? v.price_vnd, stock: v.stock })));
+    }
     if (params.ids) filtered = filtered.filter(p => params.ids!.includes(String(p.id)));
     if (specKeys.some(key => params[key]?.length)) {
       filtered = filtered.flatMap(p => {
@@ -396,7 +413,7 @@ export class ProductService {
         `SELECT v.id, v.sku, v.variant_name, v.ram_gb, v.storage_gb,
                 v.selling_price_vnd, v.price_vnd, v.is_active,
                 v.specifications, v.short_description,
-                COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0) AS stock
+                GREATEST(COALESCE(i.quantity_on_hand, 0) - COALESCE(i.quantity_reserved, 0), 0) AS stock
          FROM product_variants v
          LEFT JOIN inventory_items i ON i.variant_id = v.id
          WHERE v.product_id = $1 AND v.is_active = TRUE
@@ -405,7 +422,7 @@ export class ProductService {
       );
 
       const imagesRes = await query<ProductImage>(
-        `SELECT id, image_url, alt_text, is_primary
+        `SELECT id, variant_id, image_url, alt_text, is_primary
          FROM product_images
          WHERE product_id = $1
          ORDER BY display_order ASC, id ASC`,
@@ -469,7 +486,7 @@ export class ProductService {
     if (isDatabaseConnected()) {
       const result = await query<FacetRow>(`
         SELECT v.id, v.product_id, c.code AS category_code, b.name AS brand,
-          v.ram_gb, v.storage_gb, p.specifications || v.specifications AS specifications
+          v.ram_gb, v.storage_gb, v.specifications AS specifications
         FROM product_variants v JOIN products p ON p.id = v.product_id
         JOIN categories c ON c.id = p.category_id JOIN brands b ON b.id = p.brand_id
         WHERE p.is_active AND v.is_active
@@ -497,8 +514,23 @@ export class ProductService {
     return [...new Set((await this.getFacetRows(category)).map(row => row.brand))].sort();
   }
 
-  async getTechnicalFilters(category?: string) {
-    return facetGroups(await this.getFacetRows(category), category);
+  async getTechnicalFilters(category?: string, groupBy: 'product' | 'variant' = 'product') {
+    return facetGroups(await this.getFacetRows(category), category, groupBy);
+  }
+
+  async getPriceRange(): Promise<{ min: number; max: number | null }> {
+    if (isDatabaseConnected()) {
+      const result = await query<{ max: number | null }>(`
+        SELECT MAX(v.selling_price_vnd) AS max
+        FROM product_variants v JOIN products p ON p.id = v.product_id
+        WHERE p.is_active AND v.is_active AND v.selling_price_vnd IS NOT NULL`);
+      return { min: 0, max: result.rows[0]?.max ?? null };
+    }
+    requireMockMode();
+    const prices = MOCK_TEST_PRODUCTS.filter(p => p.is_active).flatMap(p =>
+      p.variants?.length ? p.variants.filter(v => v.is_active).map(v => v.selling_price_vnd ?? v.price_vnd) : [p.price]);
+    const known = prices.filter(price => Number.isFinite(price) && price >= 0);
+    return { min: 0, max: known.length ? Math.max(...known) : null };
   }
 
 }

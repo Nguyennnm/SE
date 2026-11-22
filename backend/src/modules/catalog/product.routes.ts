@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { productController } from './product.controller.js';
 
 const router = Router();
+router.get('/price-range', (req, res, next) => productController.getPriceRange(req, res, next));
 router.get('/filters', (req, res, next) => productController.getTechnicalFilters(req, res, next));
 router.get('/suggestions', (req, res, next) => productController.getSuggestions(req, res, next));
 
