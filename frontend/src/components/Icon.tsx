@@ -15,6 +15,7 @@ const paths: Record<string, React.ReactNode> = {
   shield: <><path d="m12 2 8 3v6c0 5-8 11-8 11S4 16 4 11V5l8-3Z"/><path d="m8 11 3 3 5-5"/></>,
   truck: <><path d="M2 5h12v12H2zM14 9h4l4 5v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></>,
   return: <><path d="M4 5v6h6M4 11a8 8 0 1 1 1 7"/></>,
+  cart: <><path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L21 8H6.2"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></>,
   spark: <path d="m12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7Z"/>,
 };
 export function Icon({ name, size = 20, style }: { name: string; size?: number; style?: CSSProperties }) {

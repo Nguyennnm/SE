@@ -19,6 +19,7 @@ interface ApiProduct {
   images?: { variant_id?: number | string | null; image_url: string; alt_text?: string }[];
   variant_count?: number;
   specifications?: Record<string, unknown>; short_description?: string;
+  description?: string | null; warranty_months?: number | null;
 }
 export interface Product {
   id: string; name: string; brand: string; category: string;
@@ -29,6 +30,7 @@ export interface Product {
   variantName?: string; variantCount?: number; variantColor?: string;
   source?: ApiProduct;
   kind: 'laptop' | 'phone' | 'tablet'; color: string; badge?: string;
+  categoryCode?: string; warranty?: string; specs?: Record<string, unknown>;
 }
 export interface Pagination { page: number; pageSize: number; total: number; totalPages: number }
 export interface Category { code: string; name: string }
@@ -62,10 +64,12 @@ function adaptProduct(p: ApiProduct, preferredSku?: string): Product {
     processor: text('cpu', 'cpu_chipset', 'chipset', 'Bộ vi xử lý', 'CPU') || 'Xem thông số chi tiết',
     ram: v?.ram_gb ?? null, storage: v?.storage_gb ? `${v.storage_gb}GB` : text('storage'),
     display: text('screen', 'display', 'Màn hình') || 'Chưa có thông tin',
-    imageUrl: images?.[0]?.image_url ?? (p.images ? undefined : p.image_url), images: images?.map(i => i.image_url) ?? [], variants: p.variants ?? [], description: v?.short_description ?? p.short_description, selectedSku: v?.sku,
+    imageUrl: images?.[0]?.image_url ?? (p.images ? undefined : p.image_url), images: images?.map(i => i.image_url) ?? [], variants: p.variants ?? [], description: v?.short_description || p.short_description || p.description || undefined, selectedSku: v?.sku,
     variantName: v?.variant_name, variantCount: p.variant_count ?? p.variants?.length ?? 0,
     variantColor: typeof v?.specifications?.color === 'string' ? v.specifications.color : undefined, source: p,
     kind: p.category_code === 'phone' ? 'phone' : p.category_code === 'tablet' ? 'tablet' : 'laptop', color: '#4879bd',
+    categoryCode: p.category_code, specs,
+    warranty: text('warranty') || (p.warranty_months ? `${p.warranty_months} tháng` : undefined),
   };
 }
 export function selectProductVariant(product: Product, sku: string): Product {
@@ -116,4 +120,14 @@ export async function getSuggestions(params: SearchParams, signal?: AbortSignal)
 export async function getDataSource(signal?: AbortSignal) {
   const { data } = await apiClient.get<{ dataSource: string }>('/health', { signal });
   return data.dataSource;
+}
+
+/** Sản phẩm tương tự cùng danh mục, gần giá nhất (UC16 – khối "Sản phẩm tương tự"). */
+export async function getSimilarProducts(product: Product, signal?: AbortSignal, count = 4) {
+  if (!product.categoryCode) return [];
+  const { items } = await searchProducts({ q: '', category: product.categoryCode, brands: [], inStock: false, sort: 'relevant', page: 1, limit: 24 }, signal);
+  const seen = new Set<string>([product.id]);
+  const unique = items.filter(p => !seen.has(p.id) && seen.add(p.id));
+  const target = product.price ?? 0;
+  return unique.sort((a, b) => Math.abs((a.price ?? Infinity) - target) - Math.abs((b.price ?? Infinity) - target)).slice(0, count);
 }
