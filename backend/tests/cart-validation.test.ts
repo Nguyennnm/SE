@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { AppError } from '../src/middleware/errorHandler.js';
-import { validateCartToken, validateQuantity, validateSku } from '../src/modules/cart/cart.validation.js';
+import { validateCartToken, validateCouponCode, validateQuantity, validateSku } from '../src/modules/cart/cart.validation.js';
 
 function rejectsCode(run: () => unknown, code: string) {
   assert.throws(run, error => error instanceof AppError && error.code === code);
@@ -19,4 +19,8 @@ for (const quantity of [0, -1, 1.5, '2', Number.MAX_SAFE_INTEGER + 1]) {
   rejectsCode(() => validateQuantity(quantity), 'INVALID_QUANTITY');
 }
 
-console.log('Cart validation: 12 checks passed.');
+assert.equal(validateCouponCode(' tech500k '), 'TECH500K');
+rejectsCode(() => validateCouponCode(''), 'INVALID_COUPON');
+rejectsCode(() => validateCouponCode('x'.repeat(41)), 'INVALID_COUPON');
+
+console.log('Cart validation: 15 checks passed.');

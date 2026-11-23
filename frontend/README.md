@@ -33,6 +33,7 @@ Design reference: [Smart Electronics Store Figma](https://www.figma.com/design/L
 | Loading and errors | Show loading feedback, empty results, connection errors, and a retry action. |
 | Image fallback | Use the catalog image when available and a local vector illustration when the image is missing or fails. |
 | Request cancellation | Cancel outdated search/detail requests so an older response does not replace newer results. |
+| Shopping cart | Persist a guest cart by browser token, edit/remove quantities, review stock and price changes, and apply the `TECH500K` demo coupon. Cart items link to their exact product SKU. |
 
 Catalog search and the saved-products view both use server-side filtering and pagination. The saved view passes its session-local product IDs to the API along with the same search/filter criteria.
 
@@ -50,7 +51,7 @@ Storage is labeled **Dung lượng SSD** for laptops, **Bộ nhớ trong** for p
 - Vite 6 for development and production builds.
 - CSS media queries for responsive layouts.
 - Fetch API and AbortController for HTTP requests and cancellation.
-- Node.js/Express backend with PostgreSQL 16 in Docker.
+- Node.js/Express backend with PostgreSQL 17 in Docker.
 
 ## Run Locally
 
@@ -136,6 +137,8 @@ All paths below are relative to `VITE_API_URL`.
 | GET | `/products/suggestions` | Fetch up to five matching product suggestions using the current keyword and filters. |
 | GET | `/products/search?groupBy=variant` | Search, filter, sort, and paginate individual SKUs. Omit `groupBy` to retain model grouping. |
 | GET | `/products/:id` | Load product details and variants. |
+| GET/POST/PATCH/DELETE | `/cart`, `/cart/items`, `/cart/items/:sku` | Read a guest cart and add, update, remove, or clear items. Send the browser's `X-Cart-Token` header. |
+| POST/DELETE | `/cart/coupon` | Apply or remove the demo coupon; `TECH500K` deducts 500,000₫ for eligible subtotals of at least 5,000,000₫. |
 
 Search parameters sent by this screen:
 
@@ -199,6 +202,7 @@ frontend/
 9. Switch from laptops to phones: laptop-only brands and usage filters disappear, and incompatible selections are cleared.
 10. Select laptop RAM 16 GB, storage 512 GB and Windows. Check the selected configuration and price in the product details.
 11. Type `ip` in the search bar, wait for suggestions, use arrow keys and Enter to select one. Press Esc to dismiss the dropdown.
+12. Open **Giỏ hàng**, add a SKU from its product details, edit the quantity, and verify returning to the cart product opens the same SKU. Apply `TECH500K` to an eligible cart and confirm the discount; clear it or lower the subtotal to see it removed.
 
 For the complete group demo workflow, see the [UC17/UC16 integration guide](../docs/integration/search-demo.md).
 
@@ -212,7 +216,7 @@ npm run test:integration
 npm run test:discovery
 ```
 
-The integration check requires the backend and PostgreSQL to be running. It uses the actual frontend API adapter and renders product cards with React, covering metadata, search, server pagination, combined filters, missing values, product details, empty results, errors, and cancellation. `test:discovery` additionally uses jsdom to exercise autocomplete debounce, keyboard selection, cancellation, stale results and category-specific screen state. These checks do not automate a browser or verify visual layout.
+The frontend integration check requires the backend and PostgreSQL to be running. It uses the actual API adapter and React rendering, covering metadata, search, server pagination, combined filters, missing values, product details, empty results, errors, and cancellation. `test:discovery` uses jsdom to exercise autocomplete debounce, keyboard selection, cancellation, stale results and category-specific screen state. These checks do not automate a browser or verify visual layout.
 
 From `backend/`:
 
@@ -221,7 +225,10 @@ npm run build
 npm test
 npm run test:integration
 npm run test:discovery
+npm run test:cart-integration
 ```
+
+`test:cart-integration` additionally verifies guest cart persistence, coupon application/removal, and item cleanup using an isolated guest token.
 
 Recorded checks on **15 November 2026** passed: frontend/backend builds, 7 existing API tests against PostgreSQL, 7 additional backend integration checks, and the frontend API/rendering check. Automated visual browser verification was unavailable; manually review layout and interactions before presenting.
 
@@ -235,4 +242,4 @@ The technical-filter/autocomplete update also passed 8 backend discovery checks 
 - At the full slider range, no explicit price constraint is sent, so products without a price may still appear. Selecting a lower maximum applies a price filter and excludes unknown prices. The upper bound is global to the active catalog, independent of the current keyword, category, filters or result page. An unpriced/empty catalog disables the slider instead of inventing a maximum.
 - Product images use catalog URLs, with local vector fallbacks if those URLs fail.
 - Saving products is temporary and does not create an account or persist a wishlist.
-- This screen implements product discovery and read-only details; checkout and inventory updates are outside its current scope.
+- Guest cart tokens are stored in browser local storage. Existing databases must apply migrations `007_guest_carts.sql` and `008_cart_coupons.sql`; the clean-install script includes both. Checkout/order creation is not implemented, and inventory is not reserved by cart operations.

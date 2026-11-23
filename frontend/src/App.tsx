@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { searchProducts, getCategories, getBrands, getTechnicalFilters, getPriceRange, getDataSource, specKeys, type SpecSelection, type SpecKey, type FacetGroup, type SearchParams, type Product, type Category } from './services/productApi';
+import { addCartItem, getCart } from './services/cartApi';
+import { ApiError } from './services/apiClient';
 import { ProductPage } from './components/ProductPage';
+import { CartPage } from './components/CartPage';
 import { ProductCard } from './components/ProductCard';
 import { SearchBox } from './components/SearchBox';
 import { TechnicalFilters } from './components/TechnicalFilters';
@@ -19,6 +22,14 @@ const parseRoute = (): ProductRoute => {
   return match ? { productId: decodeURIComponent(match[1]), sku: match[2] ? decodeURIComponent(match[2]) : undefined } : null;
 };
 const routeHash = (id: string, sku?: string) => `#/san-pham/${encodeURIComponent(id)}${sku ? `?sku=${encodeURIComponent(sku)}` : ''}`;
+const getCartToken = () => {
+  const key = 'techstore-cart-token';
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const token = window.crypto.randomUUID();
+  window.localStorage.setItem(key, token);
+  return token;
+};
 
 export default function App() {
   const [draft, setDraft] = useState('laptop');
@@ -36,6 +47,9 @@ export default function App() {
   const [savedOnly, setSavedOnly] = useState(false);
   const [saved, setSaved] = useState<string[]>([]);
   const [route, setRoute] = useState<ProductRoute>(parseRoute);
+  const [cartOpen, setCartOpen] = useState(() => window.location.hash === '#/gio-hang');
+  const [cartToken] = useState(getCartToken);
+  const [cartCount, setCartCount] = useState(0);
   const [toast, setToast] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const openedFromList = useRef(false);
@@ -100,33 +114,54 @@ export default function App() {
   }, [criteriaKey, retry]);
 
   useEffect(() => {
-    const onHash = () => setRoute(parseRoute());
+    const onHash = () => { setRoute(parseRoute()); setCartOpen(window.location.hash === '#/gio-hang'); };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
-  const showToast = (message: string) => { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 3500); };
+  const showToast = useCallback((message: string) => { setToast(message); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 3500); }, []);
+  useEffect(() => {
+    getCart(cartToken).then(cart => setCartCount(cart.itemCount))
+      .catch(error => showToast(error instanceof Error ? error.message : 'Không tải được số lượng giỏ hàng.'));
+  }, [cartToken, showToast]);
   const openDetail = (id: string, sku?: string) => {
     openedFromList.current = route === null || openedFromList.current;
     window.location.hash = routeHash(id, sku);
+    setCartOpen(false);
     setRoute({ productId: id, sku });
   };
   const closeDetail = () => {
     if (openedFromList.current && window.history.length > 1) window.history.back();
     else window.location.hash = '';
     openedFromList.current = false;
+    setCartOpen(false);
     setRoute(null);
+  };
+  const openCart = () => {
+    openedFromList.current = false;
+    window.location.hash = '#/gio-hang';
+    setRoute(null);
+    setCartOpen(true);
+  };
+  const closeCart = () => {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    setCartOpen(false);
   };
   const changeDetailSku = (sku: string) => {
     if (!route) return;
     window.history.replaceState(null, '', routeHash(route.productId, sku));
     setRoute({ productId: route.productId, sku });
   };
-  // Điểm nối với giỏ hàng (UC19): phát sự kiện để màn giỏ hàng lắng nghe và thêm đúng SKU.
-  const addToCart = (product: Product, quantity: number, buyNow: boolean) => {
-    const detail = { productId: product.id, sku: product.selectedSku, name: product.variantName ?? product.name, unitPrice: product.price, quantity };
-    window.dispatchEvent(new CustomEvent(buyNow ? 'techstore:buy-now' : 'techstore:add-to-cart', { detail }));
-    showToast(buyNow ? `Đã chọn ${quantity} × ${detail.name} để mua ngay.` : `Đã thêm ${quantity} × ${detail.name} vào giỏ hàng.`);
+  const addToCart = async (product: Product, quantity: number, buyNow: boolean) => {
+    if (!product.selectedSku) { showToast('Không xác định được SKU của sản phẩm.'); return; }
+    try {
+      const cart = await addCartItem(cartToken, product.selectedSku, quantity);
+      setCartCount(cart.itemCount);
+      showToast(`Đã thêm ${quantity} × ${product.variantName ?? product.name} vào giỏ hàng.`);
+      if (buyNow) openCart();
+    } catch (error) {
+      showToast(error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Không thể thêm sản phẩm vào giỏ.');
+    }
   };
   const reset = () => { setSpecs({}); setCategory('Tất cả'); setBrands([]); setMaxPrice(null); setInStock(false); setSavedOnly(false); setPage(1); };
   const changeCategory = (value: string) => { setCategory(value); setBrands([]); setSpecs({}); setBrandOptions([]); setFacetGroups([]); setPage(1); };
@@ -140,11 +175,12 @@ export default function App() {
     <header className="store-header"><div className="header-inner">
       <a className="logo" href="#" onClick={() => { reset(); search(''); }}><span className="logo-symbol">t<span>•</span></span>TechStore<span className="logo-period">.</span></a>
       <SearchBox value={draft} onChange={setDraft} onSearch={search} criteria={criteria}/>
+      <button className={`cart-nav-button ${cartOpen ? 'is-active' : ''}`} aria-label={`Mở giỏ hàng, ${cartCount} sản phẩm`} aria-current={cartOpen ? 'page' : undefined} onClick={openCart}><Icon name="cart"/><span>Giỏ hàng</span><b>{cartCount}</b></button>
       <button className={`saved-button ${savedOnly ? 'is-active' : ''}`} aria-pressed={savedOnly} onClick={() => { setSavedOnly(!savedOnly); setPage(1); }}><Icon name="heart"/><span>Đã lưu</span><b>{saved.length}</b></button>
     </div></header>
     <nav className="category-nav" aria-label="Danh mục"><div className="container nav-inner">{categories.map((c, i) => <button key={c} className={category === c ? 'nav-active' : ''} onClick={() => { reset(); setCategory(c); search(''); }}>{i === 0 && <Icon name="grid" size={16}/>} {c === 'Tất cả' ? 'Tất cả danh mục' : c}</button>)}<span className="nav-help"><Icon name="shield" size={15}/> An tâm chọn công nghệ</span></div></nav>
-    <main className="container">
-      {route ? <ProductPage productId={route.productId} sku={route.sku} saved={id => saved.includes(id)} onSave={toggleSaved} onSkuChange={changeDetailSku} onOpenProduct={openDetail} onBack={closeDetail} onCategory={name => { closeDetail(); reset(); changeCategory(name); search(''); }} onAddToCart={addToCart}/> : <>
+    <main className={`container ${cartOpen ? 'cart-main' : ''}`}>
+      {route ? <ProductPage productId={route.productId} sku={route.sku} saved={id => saved.includes(id)} onSave={toggleSaved} onSkuChange={changeDetailSku} onOpenProduct={openDetail} onBack={closeDetail} onCategory={name => { closeDetail(); reset(); changeCategory(name); search(''); }} onAddToCart={addToCart}/> : cartOpen ? <CartPage token={cartToken} onCountChange={setCartCount} onContinueShopping={closeCart} onOpenProduct={openDetail}/> : <>
       <div className="breadcrumb"><a href="#" onClick={() => { reset(); search(''); }}>Trang chủ</a><Icon name="chevron" size={12}/><span>Tìm kiếm sản phẩm</span></div>
       <section className="campaign"><div className="campaign-copy"><span className="campaign-label"><span/> TECHNOLOGY FOR EVERYDAY</span><h1>Công nghệ đúng gu.<br/><span>Hiệu năng đúng nhu cầu.</span></h1><p>Từ góc học tập đến bàn làm việc, tìm thiết bị dành riêng cho bạn.</p><button onClick={() => { reset(); search(''); }}>Khám phá bộ sưu tập <Icon name="arrow" size={17}/></button></div><div className="campaign-art"><span className="orbit orbit-one"/><span className="orbit orbit-two"/><ProductArt color="#79a7f2" name="Laptop"/><div className="floating-tag"><Icon name="spark" size={16}/><span>Cho mọi ý tưởng lớn</span></div></div><span className="campaign-index">01 / EVERYDAY ESSENTIALS</span></section>
       <section className="search-results" aria-labelledby="results-title">
@@ -169,9 +205,9 @@ export default function App() {
         </div>
       </section>
       </>}
-      <section className="service-strip">{[['shield', 'Chính hãng 100%', 'An tâm về nguồn gốc'], ['truck', 'Giao hàng nhanh', 'Đồng hành mọi nơi'], ['return', 'Đổi trả thuận tiện', 'Hỗ trợ theo chính sách'], ['headphones', 'Tư vấn tận tâm', 'Lựa chọn cùng chuyên gia']].map(([icon, title, text]) => <div key={icon}><Icon name={icon} size={25}/><span><b>{title}</b><small>{text}</small></span></div>)}</section>
+      {!cartOpen && <section className="service-strip">{[['shield', 'Chính hãng 100%', 'An tâm về nguồn gốc'], ['truck', 'Giao hàng nhanh', 'Đồng hành mọi nơi'], ['return', 'Đổi trả thuận tiện', 'Hỗ trợ theo chính sách'], ['headphones', 'Tư vấn tận tâm', 'Lựa chọn cùng chuyên gia']].map(([icon, title, text]) => <div key={icon}><Icon name={icon} size={25}/><span><b>{title}</b><small>{text}</small></span></div>)}</section>}
     </main>
-    <footer className="site-footer container"><div><a href="#" className="footer-logo">TechStore<span>.</span></a><p>Chọn công nghệ tốt, sống tiện nghi hơn.</p></div><span>Giá theo snapshot catalog · Tồn kho mô phỏng</span><small>© 2026 TechStore</small></footer>
+    {!cartOpen && <footer className="site-footer container"><div><a href="#" className="footer-logo">TechStore<span>.</span></a><p>Chọn công nghệ tốt, sống tiện nghi hơn.</p></div><span>Giá theo snapshot catalog · Tồn kho mô phỏng</span><small>© 2026 TechStore</small></footer>}
     {toast && <div className="toast" role="status"><Icon name="cart" size={18}/>{toast}</div>}
   </div>;
 }

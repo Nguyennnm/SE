@@ -8,6 +8,9 @@ export interface CartItem {
   brand: string;
   category: string;
   categoryCode: string;
+  ramGb: number | null;
+  storageGb: number | null;
+  color: string | null;
   imageUrl: string | null;
   quantity: number;
   unitPrice: number | null;
@@ -21,6 +24,9 @@ export interface Cart {
   items: CartItem[];
   itemCount: number;
   subtotal: number;
+  couponCode: string | null;
+  discount: number;
+  total: number;
 }
 
 interface Envelope<T> { success: boolean; data: T }
@@ -58,4 +64,12 @@ export function removeCartItem(token: string, sku: string) {
 
 export function clearCart(token: string) {
   return updateCart(token, 'DELETE', '/cart/items');
+}
+
+export function applyCartCoupon(token: string, code: string) {
+  return updateCart(token, 'POST', '/cart/coupon', { code });
+}
+
+export function removeCartCoupon(token: string) {
+  return updateCart(token, 'DELETE', '/cart/coupon');
 }

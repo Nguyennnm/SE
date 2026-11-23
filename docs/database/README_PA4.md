@@ -127,7 +127,7 @@ Không còn sử dụng `data/phongvu_catalog.csv`, `data/phongvu_pa4_2026.csv`,
 
 - Windows 11, PowerShell, Git và Python 3.
 - Docker Desktop đang hoạt động, hỗ trợ Docker Compose.
-- PostgreSQL `postgres:16-alpine` chạy qua `compose.yaml`, không bắt buộc cài PostgreSQL riêng trên Windows.
+- PostgreSQL `postgres:17-alpine` chạy qua `compose.yaml`, không bắt buộc cài PostgreSQL riêng trên Windows.
 - Ở thư mục gốc repo, tạo `.env` từ `.env.example` và dùng mật khẩu local phù hợp; **không commit `.env`**.
 - Cổng mặc định: `127.0.0.1:5434`; container: `ses-phongvu-pa4-db`; tên DB/user mặc định xem `.env.example`.
 

@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { successResponse } from '../../shared/response.js';
 import { cartService } from './cart.service.js';
-import { validateCartToken, validateQuantity, validateSku } from './cart.validation.js';
+import { validateCartToken, validateCouponCode, validateQuantity, validateSku } from './cart.validation.js';
 
 function cartToken(req: Request): string {
   const header = req.header('x-cart-token');
@@ -40,6 +40,18 @@ export class CartController {
   async clearCart(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       res.json(successResponse(await cartService.clearCart(cartToken(req))));
+    } catch (error) { next(error); }
+  }
+
+  async applyCoupon(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(successResponse(await cartService.applyCoupon(cartToken(req), validateCouponCode(req.body?.code))));
+    } catch (error) { next(error); }
+  }
+
+  async removeCoupon(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.json(successResponse(await cartService.removeCoupon(cartToken(req))));
     } catch (error) { next(error); }
   }
 }

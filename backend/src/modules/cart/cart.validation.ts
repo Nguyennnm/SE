@@ -22,3 +22,10 @@ export function validateQuantity(value: unknown): number {
   }
   return Number(value);
 }
+
+export function validateCouponCode(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 40) {
+    throw new AppError('Mã giảm giá không hợp lệ.', 400, 'INVALID_COUPON');
+  }
+  return value.trim().toUpperCase();
+}

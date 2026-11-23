@@ -10,6 +10,9 @@ export interface CartItem {
   brand: string;
   category: string;
   categoryCode: string;
+  ramGb: number | null;
+  storageGb: number | null;
+  color: string | null;
   imageUrl: string | null;
   quantity: number;
   unitPrice: number | null;
@@ -23,6 +26,9 @@ export interface Cart {
   items: CartItem[];
   itemCount: number;
   subtotal: number;
+  couponCode: string | null;
+  discount: number;
+  total: number;
 }
 
 interface CartItemRow {
@@ -34,6 +40,9 @@ interface CartItemRow {
   brand: string;
   category: string;
   category_code: string;
+  ram_gb: number | null;
+  storage_gb: number | null;
+  color: string | null;
   image_url: string | null;
   quantity: number;
   unit_price: number | null;
@@ -71,7 +80,7 @@ async function getOrCreateCartId(client: PoolClient, token: string): Promise<num
   return result.rows[0].id;
 }
 
-function toCart(rows: CartItemRow[]): Cart {
+function toCart(rows: CartItemRow[], couponCode: string | null): Cart {
   const items = rows.map((row): CartItem => {
     const unitPrice = row.product_active && row.variant_active && row.unit_price != null && row.unit_price > 0
       ? Number(row.unit_price) : null;
@@ -83,6 +92,9 @@ function toCart(rows: CartItemRow[]): Cart {
       brand: row.brand,
       category: row.category,
       categoryCode: row.category_code,
+      ramGb: row.ram_gb == null ? null : Number(row.ram_gb),
+      storageGb: row.storage_gb == null ? null : Number(row.storage_gb),
+      color: row.color,
       imageUrl: row.image_url,
       quantity: Number(row.quantity),
       unitPrice,
@@ -94,16 +106,22 @@ function toCart(rows: CartItemRow[]): Cart {
         : unitPrice !== Number(row.observed_unit_price),
     };
   });
+  const subtotal = items.reduce((sum, item) => sum + (item.unitPrice ?? 0) * item.quantity, 0);
+  const discount = couponCode === 'TECH500K' && subtotal >= 5_000_000 ? 500_000 : 0;
   return {
     items,
     itemCount: items.reduce((count, item) => count + item.quantity, 0),
-    subtotal: items.reduce((sum, item) => sum + (item.unitPrice ?? 0) * item.quantity, 0),
+    subtotal,
+    couponCode,
+    discount,
+    total: Math.max(0, subtotal - discount),
   };
 }
 
 const CART_ITEMS_SQL = `
   SELECT ci.id, v.sku, p.id AS product_id, p.model_name, v.variant_name,
     b.name AS brand, c.name AS category, c.code AS category_code,
+    v.ram_gb, v.storage_gb, v.specifications->>'color' AS color,
     (SELECT img.image_url FROM product_images img
       WHERE img.product_id = p.id AND (img.variant_id = v.id OR img.variant_id IS NULL)
       ORDER BY (img.variant_id = v.id) DESC NULLS LAST, img.is_primary DESC,
@@ -121,8 +139,25 @@ const CART_ITEMS_SQL = `
   ORDER BY ci.created_at, ci.id`;
 
 async function readCart(client: PoolClient, cartId: number): Promise<Cart> {
-  const result = await client.query<CartItemRow>(CART_ITEMS_SQL, [cartId]);
-  return toCart(result.rows);
+  const [cart, result] = await Promise.all([
+    client.query<{ coupon_code: string | null }>('SELECT coupon_code FROM shopping_carts WHERE id = $1', [cartId]),
+    client.query<CartItemRow>(CART_ITEMS_SQL, [cartId]),
+  ]);
+  return toCart(result.rows, cart.rows[0]?.coupon_code ?? null);
+}
+
+async function clearIneligibleCoupon(client: PoolClient, cartId: number): Promise<void> {
+  await client.query(
+    `UPDATE shopping_carts c SET coupon_code = NULL
+     WHERE c.id = $1 AND c.coupon_code IS NOT NULL
+       AND (SELECT COALESCE(SUM(v.selling_price_vnd * ci.quantity), 0)
+            FROM cart_items ci
+            JOIN product_variants v ON v.id = ci.variant_id
+            JOIN products p ON p.id = v.product_id
+            WHERE ci.cart_id = c.id AND p.is_active AND v.is_active
+              AND v.selling_price_vnd IS NOT NULL) < 5000000`,
+    [cartId]
+  );
 }
 
 async function lockSellableVariant(client: PoolClient, sku: string): Promise<SellableVariantRow> {
@@ -177,7 +212,7 @@ export class CartService {
       'SELECT id FROM shopping_carts WHERE guest_token = $1',
       [token]
     );
-    if (!result.rows[0]) return { items: [], itemCount: 0, subtotal: 0 };
+    if (!result.rows[0]) return { items: [], itemCount: 0, subtotal: 0, couponCode: null, discount: 0, total: 0 };
     const client = await pool.connect();
     try {
       return await readCart(client, result.rows[0].id);
@@ -208,6 +243,7 @@ export class CartService {
            updated_at = NOW()`,
         [cartId, variant.id, nextQuantity, variant.unit_price]
       );
+      await clearIneligibleCoupon(client, cartId);
       await client.query('UPDATE shopping_carts SET updated_at = NOW() WHERE id = $1', [cartId]);
       return readCart(client, cartId);
     });
@@ -232,6 +268,7 @@ export class CartService {
         [cartId, variant.id, quantity, variant.unit_price]
       );
       if (!result.rowCount) throw new AppError('Không tìm thấy sản phẩm trong giỏ.', 404, 'CART_ITEM_NOT_FOUND');
+      await clearIneligibleCoupon(client, cartId);
       await client.query('UPDATE shopping_carts SET updated_at = NOW() WHERE id = $1', [cartId]);
       return readCart(client, cartId);
     });
@@ -245,12 +282,13 @@ export class CartService {
         [token]
       );
       const cartId = cartResult.rows[0]?.id;
-      if (!cartId) return { items: [], itemCount: 0, subtotal: 0 };
+      if (!cartId) return { items: [], itemCount: 0, subtotal: 0, couponCode: null, discount: 0, total: 0 };
       await client.query(
         `DELETE FROM cart_items ci USING product_variants v
          WHERE ci.cart_id = $1 AND ci.variant_id = v.id AND v.sku = $2`,
         [cartId, sku]
       );
+      await clearIneligibleCoupon(client, cartId);
       await client.query('UPDATE shopping_carts SET updated_at = NOW() WHERE id = $1', [cartId]);
       return readCart(client, cartId);
     });
@@ -264,10 +302,52 @@ export class CartService {
         [token]
       );
       const cartId = cartResult.rows[0]?.id;
-      if (!cartId) return { items: [], itemCount: 0, subtotal: 0 };
+      if (!cartId) return { items: [], itemCount: 0, subtotal: 0, couponCode: null, discount: 0, total: 0 };
       await client.query('DELETE FROM cart_items WHERE cart_id = $1', [cartId]);
+      await client.query('UPDATE shopping_carts SET coupon_code = NULL WHERE id = $1', [cartId]);
       await client.query('UPDATE shopping_carts SET updated_at = NOW() WHERE id = $1', [cartId]);
-      return { items: [], itemCount: 0, subtotal: 0 };
+      return { items: [], itemCount: 0, subtotal: 0, couponCode: null, discount: 0, total: 0 };
+    });
+  }
+
+  async applyCoupon(token: string, code: string): Promise<Cart> {
+    requireDatabase();
+    if (code !== 'TECH500K') {
+      throw new AppError('Mã giảm giá không hợp lệ.', 400, 'INVALID_COUPON');
+    }
+    return inTransaction(async client => {
+      const cartResult = await client.query<{ id: number }>(
+        'SELECT id FROM shopping_carts WHERE guest_token = $1 FOR UPDATE',
+        [token]
+      );
+      const cartId = cartResult.rows[0]?.id;
+      if (!cartId) throw new AppError('Giỏ hàng đang trống.', 409, 'COUPON_CART_EMPTY');
+      const cart = await readCart(client, cartId);
+      if (cart.subtotal < 5_000_000) {
+        throw new AppError('Đơn hàng cần từ 5.000.000₫ để áp dụng mã này.', 409, 'COUPON_MINIMUM_NOT_MET');
+      }
+      await client.query(
+        'UPDATE shopping_carts SET coupon_code = $2, updated_at = NOW() WHERE id = $1',
+        [cartId, code]
+      );
+      return readCart(client, cartId);
+    });
+  }
+
+  async removeCoupon(token: string): Promise<Cart> {
+    requireDatabase();
+    return inTransaction(async client => {
+      const cartResult = await client.query<{ id: number }>(
+        'SELECT id FROM shopping_carts WHERE guest_token = $1 FOR UPDATE',
+        [token]
+      );
+      const cartId = cartResult.rows[0]?.id;
+      if (!cartId) return { items: [], itemCount: 0, subtotal: 0, couponCode: null, discount: 0, total: 0 };
+      await client.query(
+        'UPDATE shopping_carts SET coupon_code = NULL, updated_at = NOW() WHERE id = $1',
+        [cartId]
+      );
+      return readCart(client, cartId);
     });
   }
 }

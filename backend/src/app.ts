@@ -1,6 +1,7 @@
 import express, { type Application } from 'express';
 import cors from 'cors';
 import productRoutes from './modules/catalog/product.routes.js';
+import cartRoutes from './modules/cart/cart.routes.js';
 import { productController } from './modules/catalog/product.controller.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { isDatabaseConnected, checkDatabaseConnection } from './config/database.js';
@@ -28,6 +29,7 @@ app.get('/api/health', async (_req, res) => {
 
 // Catalog Module Routes (UC17: Tìm kiếm sản phẩm, UC16: Xem chi tiết)
 app.use('/api/products', productRoutes);
+app.use('/api/cart', cartRoutes);
 
 // Direct aliases to facilitate both Frontend and API testing conventions
 app.get('/api/search', (req, res, next) => productController.searchProducts(req, res, next));
