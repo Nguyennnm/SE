@@ -166,7 +166,12 @@ export default function App() {
   const reset = () => { setSpecs({}); setCategory('Tất cả'); setBrands([]); setMaxPrice(null); setInStock(false); setSavedOnly(false); setPage(1); };
   const changeCategory = (value: string) => { setCategory(value); setBrands([]); setSpecs({}); setBrandOptions([]); setFacetGroups([]); setPage(1); };
   const toggleSpec = (key: SpecKey, value: string) => { setSpecs(old => ({ ...old, [key]: old[key]?.includes(value) ? old[key]!.filter(v => v !== value) : [...(old[key] ?? []), value] })); setPage(1); };
-  const search = (value: string) => { setQuery(value.trim()); setDraft(value); setPage(1); };
+  const search = (value: string) => {
+    if (cartOpen) closeCart();
+    setQuery(value.trim());
+    setDraft(value);
+    setPage(1);
+  };
   const toggleSaved = (id: string) => setSaved(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]);
   const filterCount = brands.length + Number(category !== 'Tất cả') + Number(priceFilterActive) + Number(inStock) + specKeys.reduce((sum, key) => sum + (specs[key]?.length ?? 0), 0);
 
