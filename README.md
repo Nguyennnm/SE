@@ -2,7 +2,17 @@
 
 Bộ khung mã nguồn cho dự án SE.
 
-## Cấu trúc thư mục
+## Chạy luồng tìm kiếm PA4
+
+Xem [README màn hình tìm kiếm sản phẩm](frontend/README.md) để biết chức năng, cấu trúc frontend, API sử dụng và kịch bản trình diễn.
+
+Frontend React + TypeScript gọi API Node.js/Express ở cổng `5000`, truy vấn PostgreSQL ở cổng `5434`.
+
+Xem [hướng dẫn chạy, kịch bản demo và kiểm thử UC17/UC16](docs/integration/search-demo.md). Nếu database đã có dữ liệu, khởi động bằng `docker compose up -d --wait`, sau đó chạy `npm ci` và `npm run dev` trong từng thư mục `backend` và `frontend` ở hai terminal riêng.
+
+Mở `http://localhost:5173`. Healthcheck `http://localhost:5000/api/health` phải trả `dataSource: postgresql` để xác nhận demo dùng database thật. Catalog là dữ liệu snapshot; tồn kho phục vụ mô phỏng.
+
+## Khung thư mục ban đầu
 
 ```
 ├── backend
@@ -87,12 +97,10 @@ Bộ khung mã nguồn cho dự án SE.
 ├── .gitignore
 └── README.md
 ```
-```
 
 Các thư mục rỗng có tệp `.gitkeep` để Git lưu lại cấu trúc.
-Các tệp TypeScript và SQL hiện là chỗ giữ để triển khai sau.
-`package.json` và `tsconfig.json` là cấu hình mẫu; chưa khai báo thư viện,
-lệnh chạy hay lệnh kiểm thử. Cần bổ sung khi chọn công cụ cho từng phần.
+Module catalog và giao diện tìm kiếm đã được triển khai, có script chạy/build và kiểm tra tích hợp.
+Các module nghiệp vụ còn lại tiếp tục được phát triển từ khung thư mục này.
 
 Sao chép `.env.example` thành `.env` tại từng ứng dụng khi cần cấu hình
 môi trường. Không đưa thông tin bí mật vào các tệp mẫu hoặc commit `.env`.

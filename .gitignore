@@ -4,6 +4,8 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
+__pycache__/
+*.py[cod]
 
 # Local environment variables; keep templates tracked
 .env
@@ -15,3 +17,10 @@ coverage/
 *.tmp
 .DS_Store
 Thumbs.db
+
+
+PA1-Group07
+PA2-Group07
+PA3-Group07
+23120283-23120299-24120017-24120343-24120459 (2).pdf
+PA4.pdf
