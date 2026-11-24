@@ -1,6 +1,6 @@
 # Database & Phong Vũ Catalog — Smart Electronics Store (PA4)
 
-> **Trạng thái:** Đã import và kiểm tra SQL thành công trên PostgreSQL local (theo kết quả chạy `verify_windows.ps1` ngày 13/11/2026). Đây là dữ liệu phục vụ đồ án, **không phải dữ liệu bán hàng/tồn kho trực tiếp** của Phong Vũ. API Backend và giao diện Frontend vẫn cần triển khai, kiểm thử tích hợp riêng.
+> **Trạng thái:** Đã import và kiểm tra SQL thành công trên PostgreSQL local (theo kết quả chạy `verify_windows.ps1` ngày 13/11/2026). Đây là dữ liệu phục vụ đồ án, **không phải dữ liệu bán hàng/tồn kho trực tiếp** của Phong Vũ. Tại nhánh `feature/database-new-catalog`, Backend/Frontend cho UC16, UC17, UC19 và **sắp xếp Bán chạy (30 ngày)** đã có mã nguồn tích hợp. Người phụ trách đã xác nhận web chạy được trên PostgreSQL local sau khi áp dụng migration 009; các bộ test tự động và môi trường của từng thành viên vẫn cần chạy/xác minh độc lập. **Checkout chưa triển khai**.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -89,7 +89,7 @@ phongvu_catalog_snapshot (seller_sku duy nhất)
 | `product_variants` | Mỗi SKU có mã nội bộ `PV-<seller_sku>` và cấu hình, mô tả, giá riêng. |
 | `product_images` | URL ảnh đã thu thập, có `variant_id` để xác định gallery chính xác theo SKU. |
 | `inventory_items` | Số lượng demo và số lượng giữ chỗ, không phản ánh hàng có sẵn của Phong Vũ. |
-| `users`, `shopping_carts`, `cart_items` | Bảng nền cho thử nghiệm UC19; API và luồng nghiệp vụ hoàn chỉnh chưa được xác nhận. |
+| `users`, `shopping_carts`, `cart_items` | Schema giỏ hàng: API Cart hỗ trợ khách với token, thêm/sửa/xóa SKU và mã giảm giá; chưa có checkout/giữ tồn kho khi thêm giỏ. |
 
 Với UI chi tiết (UC16), nên truy vấn gallery theo **`product_images.variant_id`** của SKU đang chọn, sắp theo `display_order`. Trường `is_primary` là ảnh đại diện cấp model, **không thay thế gallery riêng của SKU**.
 
@@ -127,7 +127,7 @@ Không còn sử dụng `data/phongvu_catalog.csv`, `data/phongvu_pa4_2026.csv`,
 
 - Windows 11, PowerShell, Git và Python 3.
 - Docker Desktop đang hoạt động, hỗ trợ Docker Compose.
-- PostgreSQL `postgres:17-alpine` chạy qua `compose.yaml`, không bắt buộc cài PostgreSQL riêng trên Windows.
+- `compose.yaml` hiện khai báo **`postgres:16-alpine`**, không bắt buộc cài PostgreSQL riêng trên Windows. Nếu máy đã có volume tạo bằng phiên bản PostgreSQL khác (ví dụ 17), **không tự ép chạy image 16 trên volume đó**. Kiểm tra `docker exec ses-phongvu-pa4-db psql -U ses_user -d smart_electronics_store -c "SHOW server_version;"` trước khi thay đổi container.
 - Ở thư mục gốc repo, tạo `.env` từ `.env.example` và dùng mật khẩu local phù hợp; **không commit `.env`**.
 - Cổng mặc định: `127.0.0.1:5434`; container: `ses-phongvu-pa4-db`; tên DB/user mặc định xem `.env.example`.
 
@@ -197,8 +197,8 @@ Cần đối chiếu `703` SKU, `365` nhóm model, `703` biến thể, `4.775` �
 ### Kiểm tra 3 use case
 
 - **UC16:** `04_check_use_cases.sql` trả về model, SKU, mô tả ngắn và số ảnh theo `variant_id`. Cần bổ sung test lựa chọn màu/cấu hình đúng trên giao diện.
-- **UC17:** truy vấn tìm `galaxy` trên cả điện thoại và tablet; cần kiểm thử tìm kiếm/phân trang/lọc kết hợp sau khi có API.
-- **UC19:** kết quả hiện tại `all_variants = 703`, `cart_ready = 559`, `price_missing = 144`. Đây là điều kiện dữ liệu để thêm giỏ demo, **không chứng minh API giỏ hàng đã hoàn thành**.
+- **UC17:** Backend đã có API tìm kiếm/lọc/phân trang; truy vấn `galaxy` trên cả điện thoại và tablet. Cần chạy kiểm thử tích hợp để xác minh đúng dữ liệu trên từng máy.
+- **UC19:** kết quả dữ liệu `all_variants = 703`, `cart_ready = 559`, `price_missing = 144` phản ánh khả năng mua của snapshot. API Cart đã được tích hợp từ PR #4; vẫn cần chạy `npm run test:cart-integration` và test tay, không suy ra checkout đã hoàn thành.
 
 ## 7. Giới hạn, rủi ro và công việc còn lại
 
@@ -207,8 +207,8 @@ Cần đối chiếu `703` SKU, `365` nhóm model, `703` biến thể, `4.775` �
 3. **Giá và tồn kho:** giá snapshot có thể cũ; tồn kho là số liệu demo. SKU giá `NULL` chỉ hiển thị thông tin và không cho thêm giỏ.
 4. **Mô tả:** nguồn thiếu là hợp lệ; `description_summary` được sinh từ dữ liệu kỹ thuật nên có thể chưa tự nhiên. Không trình bày như nội dung gốc của nhà bán lẻ.
 5. **Ảnh:** hiện dùng URL ảnh bên thứ ba; chưa xác minh quyền sao chép/đăng lại hoặc độ bền URL. Không tự động rehost ảnh lên website công khai.
-6. **Tích hợp:** trong nhánh hiện tại, các file `backend/src/modules/catalog/product.service.ts`, `product.controller.ts` và `frontend/src/services/productApi.ts` vẫn là TODO. SQL smoke test thành công **chưa đồng nghĩa UC16/17/19 hoạt động trên website**.
-7. **Kiểm thử cần bổ sung:** khóa ngoại, SKU→variant→gallery, nhóm model, API tìm kiếm/lọc, giá `NULL`, thêm/sửa/xóa giỏ và xử lý cạnh tranh tồn kho.
+6. **Tích hợp:** các file Backend Catalog, Cart và Frontend đã có triển khai. Người phụ trách đã xác nhận website hoạt động sau khi thêm view `product_sales_30d`; chưa có kết quả bộ test tự động được cung cấp cho từng môi trường. **Checkout/ghi đơn và trừ tồn kho vẫn là công việc tiếp theo**.
+7. **Kiểm thử cần bổ sung/xác minh độc lập:** chạy bộ test API Search, biến thể SKU, Cart và Best Selling trên PostgreSQL; thử giá `NULL`, ảnh gallery theo SKU, phân trang và tương tác giữa giỏ với đơn hàng; phần chống oversell khi Checkout chưa triển khai.
 8. **Môi trường:** PostgreSQL local chạy qua Docker; chưa có bằng chứng deployment production hoặc kiểm thử tải.
 
 ## 8. Quy trình Git/PR cho nhóm
@@ -226,7 +226,7 @@ Nhánh đã chứa dữ liệu thay thế: `feature/database-new-catalog`.
 
 ## 9. Đơn hàng demo và bán chạy trong 30 ngày
 
-> Bổ sung trong nhánh `feature/database-new-catalog`. Đây là **hợp đồng dữ liệu cho Backend**, chưa phải chức năng checkout hay filter hoạt động trên website. Migration/seed được viết nhưng phải được kiểm thử bằng PostgreSQL thật trên máy nhóm trước khi merge.
+> Bổ sung trong nhánh `feature/database-new-catalog`. **Sort Bán chạy (30 ngày) đã nối từ Frontend → Backend → PostgreSQL**; người phụ trách đã xác nhận sửa lỗi `relation "product_sales_30d" does not exist` bằng migration 009 và website hoạt động. Migration/seed và bộ test cần được xác minh trên từng môi trường local trước khi merge. **Đây chưa phải chức năng Checkout**.
 
 ### 9.1. Cấu trúc và quy tắc
 
@@ -243,7 +243,9 @@ Nhánh đã chứa dữ liệu thay thế: `feature/database-new-catalog`.
 Chạy từ thư mục gốc repo trên PowerShell, sau khi kiểm tra Docker và backup DB nếu có dữ liệu giỏ/đơn cần giữ:
 
 ```powershell
-docker compose up -d --wait
+docker ps -a
+# Nếu container đã có và đang dừng: docker start ses-phongvu-pa4-db
+# Trước khi dùng docker compose, phải kiểm tra image PostgreSQL/volume có tương thích.
 docker cp .\database\migrations\009_orders_best_selling.sql ses-phongvu-pa4-db:/tmp/009_orders_best_selling.sql
 docker exec ses-phongvu-pa4-db psql -X -v ON_ERROR_STOP=1 -U ses_user -d smart_electronics_store -f /tmp/009_orders_best_selling.sql
 ```
@@ -299,3 +301,60 @@ LIMIT 10;
 - Sản phẩm chưa bán trả về 0 qua LEFT JOIN; sắp xếp và phân trang ổn định.
 
 **Lưu ý tài liệu tự sinh:** `scripts/replace_catalog_repo.py` có thể ghi đè README Database này khi tái sinh catalog. Cần sửa `DOC` trong generator hoặc giữ/khôi phục phần 9 sau khi chạy công cụ.
+
+## 10. Hướng dẫn đồng bộ nhóm sau khi tích hợp Bán chạy (24/11/2026)
+
+### 10.1. Lấy code và nâng cấp PostgreSQL local cũ
+
+Mỗi thành viên làm việc độc lập trên PostgreSQL Docker phải lấy đúng **nhánh `feature/database-new-catalog`**. PR #4 (Search + Product Detail + Cart) đã vào `main`, nhưng **Sort Bán chạy + migration 009 chưa nằm trên `main`** cho tới khi PR Database được merge.
+
+```powershell
+cd 'D:\Học tập\SE\SE'
+git fetch origin
+git switch feature/database-new-catalog
+git pull --ff-only origin feature/database-new-catalog
+docker ps -a
+```
+
+Giữ container/volume đang dùng, không reset dữ liệu. Sao lưu trước khi thay đổi schema. Sau đó kiểm tra:
+
+```powershell
+docker exec ses-phongvu-pa4-db psql -U ses_user -d smart_electronics_store -c "SELECT to_regclass('public.shopping_carts') AS carts, to_regclass('public.order_items') AS order_items, to_regclass('public.product_sales_30d') AS sales_view;"
+```
+
+Nếu `sales_view` là `NULL`, chạy migration **009** theo mục 9.2. Không cần chạy mỗi lần mở web. Nếu thiếu `guest_token` hoặc `coupon_code` của `shopping_carts`, DB local cũ còn thiếu migration **007/008** của PR #4; backup, kiểm tra schema nền và áp dụng đúng thứ tự (007 rồi 008). Không gọi `setup_windows.ps1` trên database đã có dữ liệu.
+
+### 10.2. Phân biệt Migration và Demo Seed
+
+- **Migration 009 — bắt buộc cho Bán chạy:** tạo bảng và view, không tự sinh doanh số.
+- **Seed demo — tùy chọn:** 6 đơn, số lượng `5 + 4 + 3 + 2 + 1 + 1 = 16`. Không phải doanh số thực, không trừ tồn kho. Chạy lại không chèn trùng, nhưng không gia hạn thời điểm xác nhận; số liệu tự rời cửa sổ 30 ngày.
+- **Giỏ hàng** chỉ lưu `cart_items`, không làm tăng `sold_30d`. Chỉ đơn `confirmed`/`completed` mới được tính.
+- **Mỗi máy là một DB riêng:** Pull Git không đồng bộ đơn hàng, giỏ hàng hoặc seed giữa các thành viên. Cần một Backend/DB chung nếu muốn xem cùng số lượng trong demo nhiều máy.
+
+### 10.3. Kiểm tra trước Pull Request vào `main`
+
+Sau khi chạy migration và tùy chọn seed, khởi chạy Backend/Frontend; mở `http://localhost:5173`, health `http://localhost:5000/api/health` cần `dataSource = postgresql`. Kiểm tra dropdown mặc định **Bán chạy (30 ngày)**, Product cùng model có chung doanh số, số lượng demo có ghi nhãn, đổi giá tăng/giảm và Cart hoạt động.
+
+```powershell
+# Trong backend/
+npm run build
+npm run test:best-selling
+npm run test:integration
+npm run test:cart-integration
+
+# Trong frontend/
+npm run build
+npm run test:integration
+npm run test:discovery
+```
+
+Không đánh dấu bộ test **PASS** nếu chưa chạy thực tế. File `database/06_check_best_selling.sql` kiểm tra trạng thái đơn và dùng transaction `ROLLBACK` cho các đơn thử nghiệm. Xem [README gốc](../../README.md) để biết lệnh chạy web, cài đặt local và giới hạn chức năng.
+
+### 10.4. Lỗi thường gặp
+
+- **`relation "product_sales_30d" does not exist`**: code mới chạy với PostgreSQL chưa có view. Kiểm tra `to_regclass(...)`, chạy migration 009 vào **đúng DB mà Backend kết nối**, rồi reload web.
+- **Sort có kết quả nhưng tất cả doanh số bằng 0**: chưa có đơn xác nhận trong 30 ngày; tùy chọn seed ở mục 9.2 nếu cần minh họa.
+- **Chỉ một thành viên thấy doanh số tăng**: các máy dùng DB local khác nhau, không có đồng bộ transaction.
+- **DB mất dữ liệu Cart/Orders sau setup**: không chạy lại script import/reset; phục hồi từ backup phù hợp và áp dụng migration tăng dần.
+
+**Giới hạn còn lại:** Checkout thực tế, xác nhận thanh toán, trừ/hoàn tồn kho và tích hợp API tạo đơn chưa được phát triển. Phải thống nhất schema với nhóm Backend trước khi triển khai, tránh xem seed demo là kết quả giao dịch thật.
