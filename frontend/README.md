@@ -24,7 +24,7 @@ Design reference: [Smart Electronics Store Figma](https://www.figma.com/design/L
 | Price filter | The slider starts at 0 VND and ends at the actual highest selling price among active catalog SKUs, loaded from the API. Presets are shown only when within that range. |
 | Stock filter | Show products with available inventory. Inventory is simulated for the project demo. |
 | Active filters | Remove an individual filter or reset all filters. Resetting filters preserves the submitted keyword. |
-| Sorting | Default order, ascending price, or descending price. The current backend default order is descending product ID. |
+| Sorting | **Bán chạy (30 ngày)** is the default UI selection, using confirmed/completed order quantities per Product; ascending and descending price remain available. |
 | Pagination | Six SKU variants per page; total counts, ordering and pagination are calculated by the API before rendering. |
 | Grid/list views | Switch the presentation without changing the search criteria. |
 | Saved products | Save or unsave a product and view the saved list. Saved IDs are held in React state and reset on page reload. |
@@ -149,7 +149,7 @@ Search parameters sent by this screen:
 | `brand` | `ASUS,Apple` | Comma-separated selected brands. |
 | `maxPrice` | `30000000` | Maximum price in VND; omitted when unlimited. |
 | `inStock` | `true` | Require available inventory. |
-| `sort` | `relevant`, `asc`, `desc` | Default order or price order. |
+| `sort` | `best_selling`, `relevant`, `asc`, `desc` | Best selling = quantity confirmed/completed in rolling 30 days; `relevant` is retained for older API clients. |
 | `page` | `1` | Requested result page. |
 | `limit` | `6` | Products per page. |
 | `ram`, `storage` | `16`, `512,1024` | Selected RAM/storage capacities in GB. |
@@ -191,6 +191,9 @@ frontend/
 
 ## Demo Scenarios
 
+**Prerequisite for Best-selling:** Install `database/migrations/009_orders_best_selling.sql` into the existing PostgreSQL database (see [Database README section 9](../docs/database/README_PA4.md)). The optional `database/seed/seed_demo_orders_best_selling.sql` creates 6 demo orders (16 total units). Without orders, every Product has 0 sales and the UI ties fall back to descending Product ID; this is not evidence of real sales. The demo counts are labeled on cards when present. Do **not** re-run the full catalog importer against an existing database.
+
+
 1. Search for `iPhone 16` using Enter. Confirm results and the `/api/products/search` request in the browser Network panel.
 2. Select the phone category, Apple brand, and a maximum price of 30M VND. Results must satisfy all selected filter types.
 3. Search for `laptop`, sort by ascending price, and move to the next page.
@@ -207,6 +210,9 @@ frontend/
 For the complete group demo workflow, see the [UC17/UC16 integration guide](../docs/integration/search-demo.md).
 
 ## Build and Check
+
+For a PostgreSQL-backed best-selling check, run `npm run test:best-selling` from `backend/` after applying migration 009. The frontend integration suite also checks the best-selling API response and therefore needs the view installed.
+
 
 From `frontend/`:
 
