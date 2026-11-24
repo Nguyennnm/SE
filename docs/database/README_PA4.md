@@ -276,19 +276,15 @@ ORDER BY sold_30d DESC, p.id DESC
 LIMIT 10;
 ```
 
-**Máy mới:** `database/00_install_clean_psql.sql` gọi migration 006 **sau** import catalog. Chạy `setup_windows.ps1` **chỉ trên database mới/trống**; sau đó tùy chọn chạy seed như trên.
+**Máy mới:** `database/00_install_clean_psql.sql` gọi migration 009 **sau** import catalog. Chạy `setup_windows.ps1` **chỉ trên database mới/trống**; sau đó tùy chọn chạy seed như trên.
 
 **Cảnh báo đặc biệt:** `database/01_import_phongvu_catalog.sql` dùng `TRUNCATE ... CASCADE`. Sau khi đã có `order_items` liên kết `product_variants`, chạy lại `setup_windows.ps1` có thể xóa các bản ghi **order_items** theo quan hệ FK, trong khi **orders** vẫn còn nhưng mất chi tiết; không sử dụng script reset này như migration tăng dần.
 
 ### 9.3. Hợp đồng cho thành viên Backend
 
-API Search cũ vẫn hoạt động như trước. Để có `sort=best_selling`, thành viên Backend cần:
+**Đã tích hợp ở nhánh Database:** Frontend chọn mặc định **Bán chạy (30 ngày)** và gửi `sort=best_selling`. Backend validation chấp nhận giá trị này; SQL LEFT JOIN `product_sales_30d` theo `product_id` và `ORDER BY sold_30d DESC, p.id DESC, rv.variant_id ASC` (tie-breaker SKU khi groupBy=variant), tất cả đều được thực hiện **trước LIMIT/OFFSET**. Số liệu được tổng hợp ở cấp Product, nên các SKU của cùng dòng có chung `sold_30d`. Response trả `sold_30d`, `demo_sold_30d` khi chọn bán chạy; Frontend ghi rõ phần demo nếu có. Các chế độ giá `asc`, `desc` vẫn hoạt động và API giữ `relevant` cho tương thích ngược.
 
-1. Thêm `best_selling` vào type/validation cho `sort`.
-2. JOIN `product_sales_30d s ON s.product_id = p.id` (LEFT JOIN vì có Product chưa bán).
-3. Dùng `ORDER BY COALESCE(s.sold_30d,0) DESC, p.id DESC` **trước LIMIT/OFFSET**, tránh phân trang sai.
-4. Tính ở cấp `product_id`, không tách riêng từng SKU thành nhiều Product card.
-5. Đặt `sold_30d` trong response và ghi rõ **demo** ở UI nếu số lượng có nguồn từ đơn mô phỏng.
+**Test Search → PostgreSQL:** Sau khi chạy migration 009, vào `backend/` và chạy `npm run test:best-selling`. Bài test đọc dữ liệu, đối chiếu xếp hạng Product/SKU với view, phân trang SKU không trùng và kiểm tra sắp giá cũ. Nếu chưa seed đơn, các sản phẩm đều có `sold_30d = 0`, thứ tự phụ theo `product_id DESC`; có thể chạy seed tùy chọn để demo thấy thứ hạng thay đổi. Trong trường hợp chưa áp dụng migration 009, yêu cầu `sort=best_selling` sẽ lỗi vì view chưa tồn tại.
 
 Đối với luồng đặt hàng: tạo `orders` và `order_items` trong transaction; kiểm tra/khóa tồn kho đúng SKU để tránh oversell; snapshot giá; xác nhận thanh toán/đặt hàng theo nghiệp vụ rồi cập nhật `status` và `confirmed_at` trong cùng transaction. Nếu thất bại rollback. Không cộng sold bằng UPDATE trên `products`; view tự tính lại. `order_code` cần duy nhất để tránh double-submit; schema cần được nhóm Backend/Sales duyệt trước khi tích hợp.
 
