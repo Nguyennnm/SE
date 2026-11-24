@@ -6,7 +6,7 @@ This screen supports **UC17: Search and Filter Products** and **UC16: View Produ
 
 ## Overview
 
-The screen helps customers find laptops, phones, and tablets by keyword, category, brand, budget, and stock availability. Customers can switch between grid and list views, browse result pages, save products during the current session, and open a product detail dialog.
+The screen helps customers find laptops, phones, and tablets by keyword, category, brand, budget, and stock availability. Customers can switch between grid and list views, browse result pages, save products during the current session, and open a dedicated product detail page and navigate to a persistent guest cart.
 
 The visual layout includes a TechStore header, search bar, category navigation, technology banner, filter panel, product results, and pagination. On smaller screens, the filter panel can be expanded using the **Bộ lọc** button.
 
@@ -24,7 +24,7 @@ Design reference: [Smart Electronics Store Figma](https://www.figma.com/design/L
 | Price filter | The slider starts at 0 VND and ends at the actual highest selling price among active catalog SKUs, loaded from the API. Presets are shown only when within that range. |
 | Stock filter | Show products with available inventory. Inventory is simulated for the project demo. |
 | Active filters | Remove an individual filter or reset all filters. Resetting filters preserves the submitted keyword. |
-| Sorting | Default order, ascending price, or descending price. The current backend default order is descending product ID. |
+| Sorting | **Bán chạy (30 ngày)** is the default UI selection, using confirmed/completed order quantities per Product; ascending and descending price remain available. |
 | Pagination | Six SKU variants per page; total counts, ordering and pagination are calculated by the API before rendering. |
 | Grid/list views | Switch the presentation without changing the search criteria. |
 | Saved products | Save or unsave a product and view the saved list. Saved IDs are held in React state and reset on page reload. |
@@ -95,7 +95,7 @@ Open **http://localhost:5173**, or the URL printed by Vite if that port is occup
 
 ### API Configuration
 
-The frontend defaults to `http://localhost:5000/api`. To use another API address, create `frontend/.env`:
+The frontend defaults to `http://localhost:5000/api`. The best-selling view requires migration 009 in the connected PostgreSQL database, even when the code is already up to date. To use another API address, create `frontend/.env`:
 
 ```dotenv
 VITE_API_URL=http://localhost:5000/api
@@ -149,7 +149,7 @@ Search parameters sent by this screen:
 | `brand` | `ASUS,Apple` | Comma-separated selected brands. |
 | `maxPrice` | `30000000` | Maximum price in VND; omitted when unlimited. |
 | `inStock` | `true` | Require available inventory. |
-| `sort` | `relevant`, `asc`, `desc` | Default order or price order. |
+| `sort` | `best_selling`, `relevant`, `asc`, `desc` | Best selling = quantity confirmed/completed in rolling 30 days; `relevant` is retained for older API clients. |
 | `page` | `1` | Requested result page. |
 | `limit` | `6` | Products per page. |
 | `ram`, `storage` | `16`, `512,1024` | Selected RAM/storage capacities in GB. |
@@ -165,7 +165,7 @@ The API returns a `data` array and a `pagination` object containing `page`, `pag
 ```text
 frontend/
 ├── src/
-│   ├── App.tsx                         # Search state, filters, requests, pagination, and detail dialog
+│   ├── App.tsx                         # Search state, filters, requests, pagination, product detail routing, and cart navigation
 │   ├── main.tsx                        # React entry point
 │   ├── search.css                      # Screen styling and responsive layouts
 │   ├── discovery.css                   # Technical filters and autocomplete dropdown styling
@@ -191,12 +191,17 @@ frontend/
 
 ## Demo Scenarios
 
+0. Select **Bán chạy (30 ngày)** (the default). With the optional order seed, check that Product families are ranked by sales across all SKUs, and any demo sales are labeled. Change to price sorting and back; neither adding to Cart nor changing Cart quantity changes the sales ranking. If the page reports `relation "product_sales_30d" does not exist`, follow Database README section 9 to apply migration 009 on the **same database the Backend is using**.
+
+**Prerequisite for Best-selling:** Install `database/migrations/009_orders_best_selling.sql` into the existing PostgreSQL database (see [Database README section 9](../docs/database/README_PA4.md)). The optional `database/seed/seed_demo_orders_best_selling.sql` creates 6 demo orders (16 total units). Without orders, every Product has 0 sales and the UI ties fall back to descending Product ID; this is not evidence of real sales. The demo counts are labeled on cards when present. Do **not** re-run the full catalog importer against an existing database.
+
+
 1. Search for `iPhone 16` using Enter. Confirm results and the `/api/products/search` request in the browser Network panel.
 2. Select the phone category, Apple brand, and a maximum price of 30M VND. Results must satisfy all selected filter types.
 3. Search for `laptop`, sort by ascending price, and move to the next page.
 4. Search for a nonexistent keyword to demonstrate the empty-results state.
 5. Clear the keyword, reset filters, and select tablets to show products with missing prices.
-6. Open two cards of the same model with different SKUs. Each dialog must select the clicked SKU and match the card's price/image. Choose another configuration and verify the selected SKU, price, specifications and availability update together.
+6. Open two cards of the same model with different SKUs. Each product detail page must select the clicked SKU and match the card's price/image. Choose another configuration and verify the selected SKU, price, specifications and availability update together.
 7. Save a product using the heart button and switch to **Đã lưu**. Existing search filters still apply to the saved list.
 8. Stop the backend, submit another search, and show the error state. Restart the backend and select **Thử lại**.
 9. Switch from laptops to phones: laptop-only brands and usage filters disappear, and incompatible selections are cleared.
@@ -207,6 +212,9 @@ frontend/
 For the complete group demo workflow, see the [UC17/UC16 integration guide](../docs/integration/search-demo.md).
 
 ## Build and Check
+
+For a PostgreSQL-backed best-selling check, run `npm run test:best-selling` from `backend/` after applying migration 009. The frontend integration suite also checks the best-selling API response and therefore needs the view installed.
+
 
 From `frontend/`:
 

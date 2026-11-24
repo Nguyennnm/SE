@@ -10,6 +10,7 @@
     "test": "tsx tests/search.test.ts",
     "test:integration": "tsx tests/integration.test.ts",
     "test:cart-integration": "tsx tests/cart-integration.test.ts",
+    "test:best-selling": "tsx tests/best-selling.test.ts",
     "test:discovery": "tsx tests/discovery.test.ts",
     "audit:filters": "tsx scripts/audit-filter-coverage.ts",
     "test:variants": "tsx tests/variants.test.ts"

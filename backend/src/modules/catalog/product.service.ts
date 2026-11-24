@@ -158,6 +158,13 @@ export class ProductService {
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    // The 009 migration installs this view. Only join it for sales ranking,
+    // so legacy price/relevant searches work even before 009 is applied.
+    const sortingBySales = params.sort === 'best_selling';
+    const salesJoin = sortingBySales ? 'LEFT JOIN product_sales_30d ps ON ps.product_id = p.id' : '';
+    const salesColumns = sortingBySales
+      ? 'COALESCE(ps.sold_30d, 0) AS sold_30d, COALESCE(ps.demo_sold_30d, 0) AS demo_sold_30d,'
+      : '';
 
     // Sắp xếp (Sort) — chỉ dùng các giá trị cố định trong code, không nối chuỗi từ người dùng
     let orderBy = 'p.id DESC';
@@ -167,7 +174,9 @@ export class ProductService {
       orderBy = 'rv.selling_price_vnd DESC NULLS LAST, p.id DESC';
     } else if (params.sort === 'rating') {
       orderBy = 'rating DESC NULLS LAST, p.id DESC';
-
+    } else if (sortingBySales) {
+      // Aggregate across all variants before LIMIT/OFFSET. Never rank by cart items.
+      orderBy = 'COALESCE(ps.sold_30d, 0) DESC, p.id DESC';
     } else if (params.sort === 'relevant') {
       orderBy = 'p.id DESC';
     }
@@ -210,6 +219,7 @@ export class ProductService {
         ${byVariant ? 'rv.available' : 'COALESCE(vs.total_available, 0)'} as stock,
         NULL::double precision as rating,
         NULL::integer as review_count,
+        ${salesColumns}
         p.is_active,
         p.specifications,
         p.short_description,
@@ -223,6 +233,7 @@ export class ProductService {
       JOIN brands b ON b.id = p.brand_id
       ${variantJoin}
       LEFT JOIN variant_stats vs ON vs.product_id = p.id
+      ${salesJoin}
       ${whereClause}
       ORDER BY ${orderBy}
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
@@ -231,6 +242,13 @@ export class ProductService {
     values.push(limit, offset);
     const dataResult = await query<Product>(dataSql, values);
     const items = dataResult.rows;
+    if (sortingBySales) {
+      // pg returns BIGINT sums as strings by default; expose numeric counts to the UI.
+      for (const item of items) {
+        item.sold_30d = Number(item.sold_30d ?? 0);
+        item.demo_sold_30d = Number(item.demo_sold_30d ?? 0);
+      }
+    }
 
     // Đính kèm danh sách biến thể cho từng sản phẩm (1 truy vấn duy nhất
     // cho cả trang) để hình dạng kết quả khớp với bản mock và TC17-01
@@ -354,7 +372,11 @@ export class ProductService {
       filtered.sort((a, b) => b.price - a.price);
     } else if (params.sort === 'rating') {
       filtered.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
-
+    } else if (params.sort === 'best_selling') {
+      // Mock data has no recorded orders; do not invent sales figures.
+      filtered.sort((a, b) => Number(b.sold_30d ?? 0) - Number(a.sold_30d ?? 0)
+        || String(b.id).localeCompare(String(a.id))
+        || String(a.variants?.[0]?.sku ?? '').localeCompare(String(b.variants?.[0]?.sku ?? '')));
     }
 
     const total = filtered.length;

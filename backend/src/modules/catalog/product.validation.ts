@@ -89,7 +89,7 @@ export function validateSearchParams(query: Record<string, any>): ProductSearchP
   // 7. Sort
   if (query.sort) {
     const sortVal = String(query.sort).toLowerCase();
-    if (['relevant', 'asc', 'desc', 'rating'].includes(sortVal)) {
+    if (['relevant', 'best_selling', 'asc', 'desc', 'rating'].includes(sortVal)) {
       params.sort = sortVal as any;
     } else {
       params.sort = 'relevant';

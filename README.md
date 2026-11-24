@@ -1,106 +1,122 @@
-# SE
+# Smart Electronics Store (SE) — PA4
 
-Bộ khung mã nguồn cho dự án SE.
+Ứng dụng bán thiết bị điện tử phục vụ đồ án Nhập môn Công nghệ phần mềm. Frontend dùng **React + Vite**, Backend dùng **Express + TypeScript**, Database dùng **PostgreSQL** trong Docker.
 
-## Chạy luồng tìm kiếm PA4
+## Trạng thái chức năng (24/11/2026)
 
-Xem [README màn hình tìm kiếm sản phẩm](frontend/README.md) để biết chức năng, cấu trúc frontend, API sử dụng và kịch bản trình diễn.
+| Phần | Trạng thái ở nhánh `feature/database-new-catalog` |
+| --- | --- |
+| UC17 — Tìm kiếm, lọc, phân trang từng SKU | Đã tích hợp |
+| UC16 — Trang chi tiết sản phẩm, chọn cấu hình/màu | Đã tích hợp |
+| UC19 — Giỏ hàng khách, tăng/giảm/xóa SKU, mã `TECH500K` | Đã tích hợp |
+| Sắp xếp **Bán chạy (30 ngày)** | Đã tích hợp Frontend → API → view PostgreSQL |
+| `orders`, `order_items`, `product_sales_30d` | Có migration `009_orders_best_selling.sql` |
+| Checkout/thanh toán/ghi nhận đơn từ giao diện | **Chưa triển khai**; giỏ hàng không phải đơn đã bán |
 
-Frontend React + TypeScript gọi API Node.js/Express ở cổng `5000`, truy vấn PostgreSQL ở cổng `5434`.
+PR #4 đã được merge vào `main` và bao gồm code Search + Product Detail + Cart. **Bán chạy và migration 009 hiện thuộc nhánh `feature/database-new-catalog`, chưa mặc nhiên có trên `main`.** Người phát triển/kiểm thử cần checkout đúng nhánh.
 
-Xem [hướng dẫn chạy, kịch bản demo và kiểm thử UC17/UC16](docs/integration/search-demo.md). Nếu database đã có dữ liệu, khởi động bằng `docker compose up -d --wait`, sau đó chạy `npm ci` và `npm run dev` trong từng thư mục `backend` và `frontend` ở hai terminal riêng.
+Tài liệu chi tiết: [Frontend](frontend/README.md) · [Database](docs/database/README_PA4.md) · [Kịch bản Search/Detail](docs/integration/search-demo.md).
 
-Mở `http://localhost:5173`. Healthcheck `http://localhost:5000/api/health` phải trả `dataSource: postgresql` để xác nhận demo dùng database thật. Catalog là dữ liệu snapshot; tồn kho phục vụ mô phỏng.
+## Chạy web trên Windows 11 — đã có PostgreSQL local
 
-## Khung thư mục ban đầu
+> **Không chạy lại `setup_windows.ps1` trên database đã có catalog/giỏ hàng/đơn hàng.** Script cài đặt mới có bước import dùng `TRUNCATE ... CASCADE`, có thể xóa dữ liệu liên quan. Hãy backup database trước khi áp dụng migration.
 
-```
-├── backend
-│   ├── src
-│   │   ├── config
-│   │   │   ├── database.ts
-│   │   │   └── env.ts
-│   │   ├── middleware
-│   │   │   ├── authMiddleware.ts
-│   │   │   ├── errorHandler.ts
-│   │   │   └── roleGuard.ts
-│   │   ├── modules
-│   │   │   ├── ai-advisor
-│   │   │   │   └── .gitkeep
-│   │   │   ├── auth
-│   │   │   │   └── .gitkeep
-│   │   │   ├── catalog
-│   │   │   │   ├── Product.model.ts
-│   │   │   │   ├── product.controller.ts
-│   │   │   │   ├── product.routes.ts
-│   │   │   │   ├── product.service.ts
-│   │   │   │   └── product.validation.ts
-│   │   │   ├── customer
-│   │   │   │   └── .gitkeep
-│   │   │   ├── inventory
-│   │   │   │   └── .gitkeep
-│   │   │   ├── promotion
-│   │   │   │   └── .gitkeep
-│   │   │   ├── reporting
-│   │   │   │   └── .gitkeep
-│   │   │   ├── sales
-│   │   │   │   └── .gitkeep
-│   │   │   └── warranty
-│   │   │       └── .gitkeep
-│   │   ├── shared
-│   │   │   └── .gitkeep
-│   │   ├── app.ts
-│   │   └── server.ts
-│   ├── package.json
-│   └── tsconfig.json
-├── database
-│   ├── migrations
-│   │   └── .gitkeep
-│   ├── seed
-│   │   └── seed-products.sql
-│   └── schema.sql
-├── docs
-│   ├── architecture
-│   │   └── .gitkeep
-│   ├── testing
-│   │   └── .gitkeep
-│   └── use-cases
-│       └── .gitkeep
-├── frontend
-│   ├── public
-│   │   └── .gitkeep
-│   ├── src
-│   │   ├── assets
-│   │   │   └── .gitkeep
-│   │   ├── components
-│   │   │   └── .gitkeep
-│   │   ├── hooks
-│   │   │   └── .gitkeep
-│   │   ├── pages
-│   │   │   └── .gitkeep
-│   │   ├── services
-│   │   │   ├── apiClient.ts
-│   │   │   └── productApi.ts
-│   │   ├── types
-│   │   │   └── .gitkeep
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── package.json
-│   └── tsconfig.json
-├── tests
-│   ├── e2e
-│   │   └── .gitkeep
-│   ├── integration
-│   │   └── .gitkeep
-│   └── unit
-│       └── .gitkeep
-├── .gitignore
-└── README.md
+Từ thư mục gốc repo:
+
+```powershell
+cd 'D:\Học tập\SE\SE'
+git switch feature/database-new-catalog
+git pull --ff-only origin feature/database-new-catalog
+
+docker ps -a
+# Nếu container đã tồn tại nhưng đang dừng:
+docker start ses-phongvu-pa4-db
 ```
 
-Các thư mục rỗng có tệp `.gitkeep` để Git lưu lại cấu trúc.
-Module catalog và giao diện tìm kiếm đã được triển khai, có script chạy/build và kiểm tra tích hợp.
-Các module nghiệp vụ còn lại tiếp tục được phát triển từ khung thư mục này.
+Kiểm tra nguồn dữ liệu:
 
-Sao chép `.env.example` thành `.env` tại từng ứng dụng khi cần cấu hình
-môi trường. Không đưa thông tin bí mật vào các tệp mẫu hoặc commit `.env`.
+```powershell
+docker exec ses-phongvu-pa4-db psql -U ses_user -d smart_electronics_store -c "SELECT to_regclass('public.product_sales_30d') AS sales_view;"
+```
+
+Nếu `sales_view` là `NULL`, máy này **chưa áp dụng migration 009**. Sau khi backup, chạy từ thư mục gốc:
+
+```powershell
+docker cp .\database\migrations\009_orders_best_selling.sql ses-phongvu-pa4-db:/tmp/009_orders_best_selling.sql
+docker exec ses-phongvu-pa4-db psql -X -v ON_ERROR_STOP=1 -U ses_user -d smart_electronics_store -f /tmp/009_orders_best_selling.sql
+```
+
+Migration 009 tạo `orders`, `order_items`, view `product_sales_30d`. **Mỗi PostgreSQL local riêng cần áp dụng một lần**; `git pull` không thay đổi schema hay dữ liệu Docker Volume. Máy dùng chung PostgreSQL đã nâng cấp thì không cần chạy lại.
+
+Nếu các bảng Cart từ PR #4 còn thiếu, xem hướng dẫn migration 007/008 ở [README Database](docs/database/README_PA4.md). Với **database hoàn toàn mới/trống**, xem phần cài đặt sạch trong README Database; kiểm tra phiên bản PostgreSQL phù hợp với Docker Volume trước khi khởi tạo.
+
+### Chạy Backend và Frontend
+
+Mở 2 terminal độc lập:
+
+```powershell
+# Terminal Backend
+cd 'D:\Học tập\SE\SE\backend'
+npm ci
+npm run dev
+```
+
+```powershell
+# Terminal Frontend
+cd 'D:\Học tập\SE\SE\frontend'
+npm ci
+npm run dev
+```
+
+Mở **http://localhost:5173**. API health: **http://localhost:5000/api/health** phải có `database: connected`, `dataSource: postgresql`. Nếu Vite báo cổng khác, mở đúng URL do Vite in ra.
+
+## Sắp xếp Bán chạy (30 ngày)
+
+Frontend mặc định chọn `sort=best_selling`, thay cho nhãn *Phù hợp nhất* (API vẫn giữ `sort=relevant` cho tương thích ngược). Backend **sắp xếp trước `LIMIT/OFFSET`** theo tổng `sold_30d` của từng **Product**, có thứ tự phụ ổn định theo Product ID/SKU. Tùy chọn giá tăng/giảm vẫn hoạt động.
+
+- `sold_30d`: tổng `order_items.quantity` trong 30 × 24 giờ, chỉ tính đơn `confirmed`/`completed` có `confirmed_at` hợp lệ; không tính `pending`, `cancelled` hay giỏ hàng.
+- Nhiều SKU trong cùng một Product dùng **chung** số đã bán của Product.
+- `demo_sold_30d`: phần doanh số từ đơn demo; UI ghi rõ khi có số liệu. Đây **không phải doanh số thực của Phong Vũ**.
+- Nếu chưa có đơn: số đã bán là 0 cho tất cả sản phẩm và sắp theo thứ tự phụ; website vẫn chạy bình thường khi view đã tồn tại.
+
+**Seed tùy chọn cho demo**, tạo 6 đơn hoàn tất với số lượng lần lượt **5, 4, 3, 2, 1, 1** (tổng 16) cho 6 Product đủ điều kiện:
+
+```powershell
+docker cp .\database\seed\seed_demo_orders_best_selling.sql ses-phongvu-pa4-db:/tmp/seed_demo_orders_best_selling.sql
+docker exec ses-phongvu-pa4-db psql -X -v ON_ERROR_STOP=1 -U ses_user -d smart_electronics_store -f /tmp/seed_demo_orders_best_selling.sql
+```
+
+Seed có mã đơn cố định để tránh chèn trùng khi chạy lại; thời điểm xác nhận **không tự gia hạn**, nên sau 30 ngày doanh số demo sẽ không còn nằm trong cửa sổ 30 ngày. Seed **không trừ tồn kho**.
+
+## Kiểm thử
+
+Sau khi PostgreSQL và migration 009 đã hoạt động:
+
+```powershell
+cd 'D:\Học tập\SE\SE\backend'
+npm run build
+npm run test:best-selling
+npm run test:integration
+npm run test:cart-integration
+```
+
+```powershell
+cd 'D:\Học tập\SE\SE\frontend'
+npm run build
+npm run test:integration
+npm run test:discovery
+```
+
+Bài test `test:best-selling` đọc view PostgreSQL, đối chiếu thứ hạng Product/SKU và phân trang, không tạo đơn; `test:cart-integration` tạo/xóa giỏ hàng test. Các lệnh trên là **hướng dẫn thực thi**, không phải kết quả đã tự động chạy trong môi trường của mọi thành viên.
+
+**Kiểm thử tay gợi ý:** Search → chọn `Bán chạy (30 ngày)` → kiểm tra vị trí và nhãn demo → đổi sang giá tăng/giảm → Detail đúng SKU → Cart thêm/sửa/xóa. Giỏ hàng không làm tăng `sold_30d` hoặc tự giảm tồn kho.
+
+## Cộng tác và lưu ý dữ liệu
+
+- Mỗi thành viên có **PostgreSQL Docker local riêng**: đơn hàng, giỏ và số liệu bán chạy **không tự đồng bộ qua Git**. Muốn demo trên nhiều máy với số liệu giống nhau, dùng Backend/Database chung.
+- Catalog là snapshot, tồn kho mô phỏng; thiếu giá, bảo hành hoặc đánh giá thì giữ nguyên dữ liệu thiếu, không bịa.
+- Không commit `.env`, password, backup PostgreSQL, `.venv`, hay thư mục ảnh local `frontend/public/images/` nếu chưa kiểm tra quyền sử dụng.
+- Chạy `git status` trước khi chuyển nhánh. Không dùng `git clean -fd` trên thư mục ảnh chưa được Git theo dõi.
+- **Chưa có Checkout:** phần schema `orders` cần thống nhất với thành viên làm Backend/Sales trước khi đưa giao dịch thật vào hệ thống.
+
+Xem [README Database](docs/database/README_PA4.md) để biết các migration, SQL kiểm tra và giới hạn dữ liệu.
