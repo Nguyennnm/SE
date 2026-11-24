@@ -18,6 +18,9 @@ try {
   const base = { q: '', category: 'Tất cả', brands: [], inStock: false, sort: 'relevant', page: 1, limit: 6 };
   const result = await api.searchProducts(base);
   assert(result.pagination.total > 6); assert.equal(result.items.length, 6);
+  const ranked = await api.searchProducts({ ...base, sort: 'best_selling' });
+  assert(ranked.items.every(p => p.sold30d != null && Number.isFinite(p.sold30d)));
+  assert(ranked.items.every((p, i) => i === 0 || ranked.items[i - 1].sold30d >= p.sold30d));
   const second = await api.searchProducts({ ...base, page: 2 });
   assert(!result.items.some(p => second.items.some(other => other.selectedSku === p.selectedSku)));
   assert(result.items.every(p => p.selectedSku && p.variants.length === 1));
