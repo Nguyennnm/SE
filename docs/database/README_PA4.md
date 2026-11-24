@@ -223,3 +223,83 @@ Nhánh đã chứa dữ liệu thay thế: `feature/database-new-catalog`.
 ---
 
 **Nguyên tắc:** Dataset catalog mới là nguồn duy nhất; dữ liệu thiếu được giữ đúng là thiếu; mỗi SKU là một biến thể riêng; không gắn nhãn năm 2026 thiếu căn cứ; tách biệt dữ liệu thật đã quan sát với giá/tồn kho demo.
+
+## 9. Đơn hàng demo và bán chạy trong 30 ngày
+
+> Bổ sung trong nhánh `feature/database-new-catalog`. Đây là **hợp đồng dữ liệu cho Backend**, chưa phải chức năng checkout hay filter hoạt động trên website. Migration/seed được viết nhưng phải được kiểm thử bằng PostgreSQL thật trên máy nhóm trước khi merge.
+
+### 9.1. Cấu trúc và quy tắc
+
+- `orders`: `id`, `order_code` (unique), `user_id` (nullable để seed đơn khách demo), `status`, `created_at`, `confirmed_at`, `is_demo`.
+- `order_items`: `order_id`, `variant_id`, `quantity` (>0), `unit_price_vnd` (>0, **giá chốt tại lúc đặt hàng**). Unique `(order_id, variant_id)` bảo đảm một SKU không lặp thành nhiều dòng trong cùng đơn.
+- `product_sales_30d`: **VIEW thường**, tính `sold_30d` và `demo_sold_30d` theo `product_id`. Cộng `order_items.quantity` của mọi biến thể thuộc cùng Product, trong **30 × 24 giờ** tính tới thời điểm truy vấn, dựa vào `confirmed_at`.
+- Chỉ tính `status IN ('confirmed','completed')`. Không tính `pending`, `cancelled`, `cart_items` hay lượng tồn kho. Đơn chuyển `confirmed` → `completed` **không bị cộng hai lần**. Đơn đã xác nhận nhưng sau đó hủy không còn trong view.
+- `confirmed_at` bắt buộc khi trạng thái là `confirmed`/`completed`. Chỉ dùng `confirmed` khi nghiệp vụ đã xác nhận mua hàng thực sự, không chỉ tạo checkout chờ thanh toán.
+- `is_demo = TRUE` cho các giao dịch thử nghiệm; `demo_sold_30d` giúp kiểm tra bao nhiêu đơn vị là dữ liệu demo. Dữ liệu demo không phản ánh doanh số thực của Phong Vũ.
+- Nếu nhóm đã thiết kế `orders` hoặc `order_items` trên nhánh khác, **phải thống nhất schema** trước khi chạy migration. `CREATE TABLE IF NOT EXISTS` không tự đồng bộ cấu trúc bảng đang tồn tại.
+
+### 9.2. Triển khai trên máy local **đã có** catalog
+
+Chạy từ thư mục gốc repo trên PowerShell, sau khi kiểm tra Docker và backup DB nếu có dữ liệu giỏ/đơn cần giữ:
+
+```powershell
+docker compose up -d --wait
+docker cp .\database\migrations\009_orders_best_selling.sql ses-phongvu-pa4-db:/tmp/009_orders_best_selling.sql
+docker exec ses-phongvu-pa4-db psql -X -v ON_ERROR_STOP=1 -U ses_user -d smart_electronics_store -f /tmp/009_orders_best_selling.sql
+```
+
+Tùy chọn seed 6 đơn đã hoàn tất với số lượng **5, 4, 3, 2, 1, 1** trên 6 dòng Product đang có SKU có giá. Seed dùng `order_code` cố định `DEMO-BS-001` đến `DEMO-BS-006`, có thể chạy lại mà không chèn trùng:
+
+```powershell
+docker cp .\database\seed\seed_demo_orders_best_selling.sql ses-phongvu-pa4-db:/tmp/seed_demo_orders_best_selling.sql
+docker exec ses-phongvu-pa4-db psql -X -v ON_ERROR_STOP=1 -U ses_user -d smart_electronics_store -f /tmp/seed_demo_orders_best_selling.sql
+```
+
+Không seed tài khoản/password giả. Seed chỉ sinh các đơn khách demo `user_id IS NULL` để thử ranking; Backend checkout có thể yêu cầu đăng nhập riêng. **Seed chỉ tạo lịch sử đơn để thử bảng xếp hạng, không tự trừ tồn kho demo**; phần checkout phải dùng transaction riêng để quản lý số lượng tồn kho và tránh bán vượt.
+
+**Kiểm tra database:**
+
+```powershell
+docker cp .\database\06_check_best_selling.sql ses-phongvu-pa4-db:/tmp/06_check_best_selling.sql
+docker exec ses-phongvu-pa4-db psql -X -v ON_ERROR_STOP=1 -U ses_user -d smart_electronics_store -f /tmp/06_check_best_selling.sql
+```
+
+Truy vấn thủ công để kiểm tra ranking:
+
+```sql
+SELECT p.id, p.model_name, COALESCE(s.sold_30d, 0) AS sold_30d,
+       COALESCE(s.demo_sold_30d, 0) AS demo_sold_30d
+FROM products p
+LEFT JOIN product_sales_30d s ON s.product_id = p.id
+WHERE p.is_active
+ORDER BY sold_30d DESC, p.id DESC
+LIMIT 10;
+```
+
+**Máy mới:** `database/00_install_clean_psql.sql` gọi migration 006 **sau** import catalog. Chạy `setup_windows.ps1` **chỉ trên database mới/trống**; sau đó tùy chọn chạy seed như trên.
+
+**Cảnh báo đặc biệt:** `database/01_import_phongvu_catalog.sql` dùng `TRUNCATE ... CASCADE`. Sau khi đã có `order_items` liên kết `product_variants`, chạy lại `setup_windows.ps1` có thể xóa các bản ghi **order_items** theo quan hệ FK, trong khi **orders** vẫn còn nhưng mất chi tiết; không sử dụng script reset này như migration tăng dần.
+
+### 9.3. Hợp đồng cho thành viên Backend
+
+API Search cũ vẫn hoạt động như trước. Để có `sort=best_selling`, thành viên Backend cần:
+
+1. Thêm `best_selling` vào type/validation cho `sort`.
+2. JOIN `product_sales_30d s ON s.product_id = p.id` (LEFT JOIN vì có Product chưa bán).
+3. Dùng `ORDER BY COALESCE(s.sold_30d,0) DESC, p.id DESC` **trước LIMIT/OFFSET**, tránh phân trang sai.
+4. Tính ở cấp `product_id`, không tách riêng từng SKU thành nhiều Product card.
+5. Đặt `sold_30d` trong response và ghi rõ **demo** ở UI nếu số lượng có nguồn từ đơn mô phỏng.
+
+Đối với luồng đặt hàng: tạo `orders` và `order_items` trong transaction; kiểm tra/khóa tồn kho đúng SKU để tránh oversell; snapshot giá; xác nhận thanh toán/đặt hàng theo nghiệp vụ rồi cập nhật `status` và `confirmed_at` trong cùng transaction. Nếu thất bại rollback. Không cộng sold bằng UPDATE trên `products`; view tự tính lại. `order_code` cần duy nhất để tránh double-submit; schema cần được nhóm Backend/Sales duyệt trước khi tích hợp.
+
+### 9.4. Các trường hợp kiểm thử cần xác minh
+
+- Seed lần thứ hai không tăng tổng đơn hoặc số lượng bán. File kiểm tra chạy thêm test vòng đời đơn trong transaction rồi `ROLLBACK`, không để lại đơn test.
+- Thêm `cart_items` không thay đổi `sold_30d`.
+- Thêm đơn `pending` không đổi; đổi thành `confirmed` có `confirmed_at` thì tăng đúng `quantity`.
+- Chuyển `confirmed` → `completed` không tăng thêm; chuyển sang `cancelled` thì bị loại.
+- Nhiều SKU cùng `product_id` được cộng chung.
+- Đơn xác nhận cũ hơn 30 ngày không được tính.
+- Sản phẩm chưa bán trả về 0 qua LEFT JOIN; sắp xếp và phân trang ổn định.
+
+**Lưu ý tài liệu tự sinh:** `scripts/replace_catalog_repo.py` có thể ghi đè README Database này khi tái sinh catalog. Cần sửa `DOC` trong generator hoặc giữ/khôi phục phần 9 sau khi chạy công cụ.

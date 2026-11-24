@@ -7,4 +7,5 @@
 \ir migrations/007_guest_carts.sql
 \ir migrations/008_cart_coupons.sql
 \ir 01_import_phongvu_catalog.sql
+\ir migrations/009_orders_best_selling.sql
 \ir 03_check_import.sql
