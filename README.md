@@ -113,11 +113,11 @@ Phần Database trên nhánh `feature/database-new-catalog` có migration
 và view `product_sales_30d`. Số lượng bán được tính từ đơn `confirmed`/`completed`
 trong 30 ngày, tổng hợp theo `product_id`, **không tính giỏ hàng hoặc đơn đang chờ**.
 
-- **Database local mới:** Chạy `setup_windows.ps1` một lần để import catalog và áp dụng migration 006. Seed đơn demo là bước tùy chọn riêng, không chạy tự động.
-- **Database local đã có catalog:** Chỉ chạy migration 006 trực tiếp; **không chạy lại `setup_windows.ps1`** do SQL import catalog có thể TRUNCATE dữ liệu.
+- **Database local mới:** Chạy `setup_windows.ps1` một lần để import catalog và áp dụng migration 009. Seed đơn demo là bước tùy chọn riêng, không chạy tự động.
+- **Database local đã có catalog:** Chỉ chạy migration 009 trực tiếp; **không chạy lại `setup_windows.ps1`** do SQL import catalog có thể TRUNCATE dữ liệu.
 - **Seed tùy chọn:** `database/seed/seed_demo_orders_best_selling.sql` tạo 6 đơn hàng demo đã hoàn tất, không phản ánh doanh số thật hoặc tự trừ tồn kho.
 - **Kiểm thử:** `database/06_check_best_selling.sql` kiểm tra xếp hạng và vòng đời trạng thái đơn hàng; các đơn test được rollback.
 
 Xem **[README Database — Mục 9](docs/database/README_PA4.md#9-đơn-hàng-demo-và-bán-chạy-trong-30-ngày)** để biết đầy đủ lệnh chạy PowerShell, cấu trúc bảng, query và quy tắc tích hợp Backend.
 
-**Chưa phải tính năng Frontend hoàn chỉnh:** Backend/Frontend Search cần tích hợp `sort=best_selling` và người phụ trách đặt hàng cần thống nhất schema `orders` trước khi merge.
+**Search đã tích hợp:** UI mặc định **Bán chạy (30 ngày)**, gửi `sort=best_selling`; API sắp xếp theo `sold_30d` trước khi phân trang, trả cả `demo_sold_30d` để ghi chú số liệu mô phỏng. Chạy `npm run test:best-selling` trong `backend/` sau khi áp dụng migration 009. Nếu chưa có đơn, tất cả sản phẩm có doanh số 0 và thứ tự phụ theo Product ID. **Chức năng Checkout vẫn chưa được tích hợp**; nhóm cần thống nhất schema `orders` trước khi triển khai đặt hàng thực tế.
