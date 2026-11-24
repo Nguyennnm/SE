@@ -6,7 +6,7 @@ This screen supports **UC17: Search and Filter Products** and **UC16: View Produ
 
 ## Overview
 
-The screen helps customers find laptops, phones, and tablets by keyword, category, brand, budget, and stock availability. Customers can switch between grid and list views, browse result pages, save products during the current session, and open a product detail dialog.
+The screen helps customers find laptops, phones, and tablets by keyword, category, brand, budget, and stock availability. Customers can switch between grid and list views, browse result pages, save products during the current session, and open a dedicated product detail page and navigate to a persistent guest cart.
 
 The visual layout includes a TechStore header, search bar, category navigation, technology banner, filter panel, product results, and pagination. On smaller screens, the filter panel can be expanded using the **Bộ lọc** button.
 
@@ -95,7 +95,7 @@ Open **http://localhost:5173**, or the URL printed by Vite if that port is occup
 
 ### API Configuration
 
-The frontend defaults to `http://localhost:5000/api`. To use another API address, create `frontend/.env`:
+The frontend defaults to `http://localhost:5000/api`. The best-selling view requires migration 009 in the connected PostgreSQL database, even when the code is already up to date. To use another API address, create `frontend/.env`:
 
 ```dotenv
 VITE_API_URL=http://localhost:5000/api
@@ -165,7 +165,7 @@ The API returns a `data` array and a `pagination` object containing `page`, `pag
 ```text
 frontend/
 ├── src/
-│   ├── App.tsx                         # Search state, filters, requests, pagination, and detail dialog
+│   ├── App.tsx                         # Search state, filters, requests, pagination, product detail routing, and cart navigation
 │   ├── main.tsx                        # React entry point
 │   ├── search.css                      # Screen styling and responsive layouts
 │   ├── discovery.css                   # Technical filters and autocomplete dropdown styling
@@ -191,6 +191,8 @@ frontend/
 
 ## Demo Scenarios
 
+0. Select **Bán chạy (30 ngày)** (the default). With the optional order seed, check that Product families are ranked by sales across all SKUs, and any demo sales are labeled. Change to price sorting and back; neither adding to Cart nor changing Cart quantity changes the sales ranking. If the page reports `relation "product_sales_30d" does not exist`, follow Database README section 9 to apply migration 009 on the **same database the Backend is using**.
+
 **Prerequisite for Best-selling:** Install `database/migrations/009_orders_best_selling.sql` into the existing PostgreSQL database (see [Database README section 9](../docs/database/README_PA4.md)). The optional `database/seed/seed_demo_orders_best_selling.sql` creates 6 demo orders (16 total units). Without orders, every Product has 0 sales and the UI ties fall back to descending Product ID; this is not evidence of real sales. The demo counts are labeled on cards when present. Do **not** re-run the full catalog importer against an existing database.
 
 
@@ -199,7 +201,7 @@ frontend/
 3. Search for `laptop`, sort by ascending price, and move to the next page.
 4. Search for a nonexistent keyword to demonstrate the empty-results state.
 5. Clear the keyword, reset filters, and select tablets to show products with missing prices.
-6. Open two cards of the same model with different SKUs. Each dialog must select the clicked SKU and match the card's price/image. Choose another configuration and verify the selected SKU, price, specifications and availability update together.
+6. Open two cards of the same model with different SKUs. Each product detail page must select the clicked SKU and match the card's price/image. Choose another configuration and verify the selected SKU, price, specifications and availability update together.
 7. Save a product using the heart button and switch to **Đã lưu**. Existing search filters still apply to the saved list.
 8. Stop the backend, submit another search, and show the error state. Restart the backend and select **Thử lại**.
 9. Switch from laptops to phones: laptop-only brands and usage filters disappear, and incompatible selections are cleared.
