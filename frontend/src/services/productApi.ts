@@ -15,7 +15,7 @@ export interface ProductVariant {
 interface ApiProduct {
   id: number | string; name: string; brand: string; category: string; category_code: string;
   price: number | null; original_price?: number | null; stock: number; rating: number | null;
-  review_count: number | null; image_url?: string; variants?: ProductVariant[];
+  review_count: number | null; sold_30d?: number | string; demo_sold_30d?: number | string; image_url?: string; variants?: ProductVariant[];
   images?: { variant_id?: number | string | null; image_url: string; alt_text?: string }[];
   variant_count?: number;
   specifications?: Record<string, unknown>; short_description?: string;
@@ -27,6 +27,7 @@ export interface Product {
   processor: string; ram: number | null; storage: string; display: string;
   imageUrl?: string; images: string[]; variants: ProductVariant[]; description?: string;
   selectedSku?: string;
+  sold30d?: number; demoSold30d?: number;
   variantName?: string; variantCount?: number; variantColor?: string;
   source?: ApiProduct;
   kind: 'laptop' | 'phone' | 'tablet'; color: string; badge?: string;
@@ -65,6 +66,8 @@ function adaptProduct(p: ApiProduct, preferredSku?: string): Product {
     ram: v?.ram_gb ?? null, storage: v?.storage_gb ? `${v.storage_gb}GB` : text('storage'),
     display: text('screen', 'display', 'Màn hình') || 'Chưa có thông tin',
     imageUrl: images?.[0]?.image_url ?? (p.images ? undefined : p.image_url), images: images?.map(i => i.image_url) ?? [], variants: p.variants ?? [], description: v?.short_description || p.short_description || p.description || undefined, selectedSku: v?.sku,
+    sold30d: p.sold_30d == null ? undefined : Number(p.sold_30d),
+    demoSold30d: p.demo_sold_30d == null ? undefined : Number(p.demo_sold_30d),
     variantName: v?.variant_name, variantCount: p.variant_count ?? p.variants?.length ?? 0,
     variantColor: typeof v?.specifications?.color === 'string' ? v.specifications.color : undefined, source: p,
     kind: p.category_code === 'phone' ? 'phone' : p.category_code === 'tablet' ? 'tablet' : 'laptop', color: '#4879bd',
