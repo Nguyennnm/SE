@@ -41,6 +41,9 @@ export interface Product {
   // khong bia so lieu. Du lieu mock van co rating that de test.
   rating: number | null;
   review_count: number | null;
+  // Sales are aggregated per Product, not per SKU; only returned for best_selling.
+  sold_30d?: number;
+  demo_sold_30d?: number;
   image_url?: string;
   images?: ProductImage[];
   variants?: ProductVariant[];
@@ -60,7 +63,7 @@ export interface ProductSearchParams extends SpecSelection {
   minPrice?: number;
   maxPrice?: number;
   inStock?: boolean;
-  sort?: 'relevant' | 'asc' | 'desc' | 'rating';
+  sort?: 'relevant' | 'best_selling' | 'asc' | 'desc' | 'rating';
   page?: number;
   limit?: number;
 }
