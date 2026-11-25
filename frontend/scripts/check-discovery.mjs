@@ -151,6 +151,22 @@ try {
   assert(document.querySelector('.pdp-tabs'), 'Trang chi tiết có tab mô tả / thông số');
   await act(async () => document.querySelector('.pdp-tabs [role=tab]').click());
   assert(document.querySelector('.pdp-specs table'), 'Bảng thông số hiển thị');
+  // Searching from the product detail page: clicking a suggestion opens that product's detail page.
+  await act(async () => document.querySelector('input[role=combobox]').focus());
+  await change('iPhone');
+  await until(() => document.querySelectorAll('[role=option]').length > 0);
+  const targetOption = document.querySelectorAll('[role=option]')[1] ?? document.querySelector('[role=option]');
+  const targetTitle = targetOption.querySelector('b').textContent;
+  await act(async () => targetOption.click());
+  await until(() => window.location.hash.startsWith('#/san-pham/') && document.querySelector('.pdp h1')?.textContent === targetTitle);
+  assert(document.querySelector('.pdp'), 'Nhấn sản phẩm gợi ý từ trang chi tiết phải mở trang chi tiết sản phẩm đó');
+  // Submitting a text search from the detail page returns to search results.
+  await act(async () => document.querySelector('input[role=combobox]').focus());
+  await change('iPhone 16');
+  await act(async () => document.querySelector('form[role=search]').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  await until(() => !document.querySelector('.pdp') && document.querySelector('.product-results .product'));
+  await act(async () => document.querySelector('.product h3 button').click());
+  await until(() => document.querySelector('.pdp'));
   await act(async () => document.querySelector('.detail-back').click());
   await until(() => !document.querySelector('.pdp') && document.querySelector('.product-results'));
   console.log('PASS variants: separate SKU cards, exact detail page selection, image/price consistency, switching configurations and back to results.');

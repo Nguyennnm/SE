@@ -167,10 +167,19 @@ export default function App() {
   const changeCategory = (value: string) => { setCategory(value); setBrands([]); setSpecs({}); setBrandOptions([]); setFacetGroups([]); setPage(1); };
   const toggleSpec = (key: SpecKey, value: string) => { setSpecs(old => ({ ...old, [key]: old[key]?.includes(value) ? old[key]!.filter(v => v !== value) : [...(old[key] ?? []), value] })); setPage(1); };
   const search = (value: string) => {
+    if (route) {
+      openedFromList.current = false;
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+      setRoute(null);
+    }
     if (cartOpen) closeCart();
     setQuery(value.trim());
     setDraft(value);
     setPage(1);
+  };
+  const selectSuggestedProduct = (product: Product) => {
+    setDraft(product.variantName ?? product.name);
+    openDetail(product.id, product.selectedSku ?? product.variants[0]?.sku);
   };
   const toggleSaved = (id: string) => setSaved(old => old.includes(id) ? old.filter(x => x !== id) : [...old, id]);
   const filterCount = brands.length + Number(category !== 'Tất cả') + Number(priceFilterActive) + Number(inStock) + specKeys.reduce((sum, key) => sum + (specs[key]?.length ?? 0), 0);
@@ -179,7 +188,7 @@ export default function App() {
     <div className="announcement"><span>Thiết bị tốt. Lựa chọn thông minh.</span><span className="preview-label">{source === 'postgresql' ? 'CATALOG PHONG VŨ · TỒN KHO DEMO' : source === 'mock' ? 'CHẾ ĐỘ DỮ LIỆU MẪU' : 'CATALOG ĐIỆN TỬ'}</span></div>
     <header className="store-header"><div className="header-inner">
       <a className="logo" href="#" onClick={() => { reset(); search(''); }}><span className="logo-symbol">t<span>•</span></span>TechStore<span className="logo-period">.</span></a>
-      <SearchBox value={draft} onChange={setDraft} onSearch={search} criteria={criteria}/>
+      <SearchBox value={draft} onChange={setDraft} onSearch={search} onSelectProduct={selectSuggestedProduct} criteria={criteria}/>
       <button className={`cart-nav-button ${cartOpen ? 'is-active' : ''}`} aria-label={`Mở giỏ hàng, ${cartCount} sản phẩm`} aria-current={cartOpen ? 'page' : undefined} onClick={openCart}><Icon name="cart"/><span>Giỏ hàng</span><b>{cartCount}</b></button>
       <button className={`saved-button ${savedOnly ? 'is-active' : ''}`} aria-pressed={savedOnly} onClick={() => { setSavedOnly(!savedOnly); setPage(1); }}><Icon name="heart"/><span>Đã lưu</span><b>{saved.length}</b></button>
     </div></header>
