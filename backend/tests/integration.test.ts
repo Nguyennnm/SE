@@ -71,7 +71,18 @@ try {
     await read('/products/search?page=1.5', 400);
     await read('/products/no-such-product', 404);
   });
-  console.log(`Integration: ${passed}/7 checks passed (503 guard and PostgreSQL integration).`);
+  await check('SKU search matches whole codes only, not short numbers (B006)', async () => {
+    const sku = (await pool.query("SELECT sku FROM product_variants WHERE sku ~ '^PV-[0-9]{6,}$' LIMIT 1")).rows[0]?.sku as string;
+    assert(sku, 'catalog needs at least one PV- SKU');
+    const bySku = await read('/products/search?groupBy=variant&q=' + encodeURIComponent(sku));
+    assert(bySku.data.some((p: any) => p.variants?.[0]?.sku === sku), sku);
+    const byDigits = await read('/products/search?groupBy=variant&q=' + sku.slice(3));
+    assert(byDigits.data.some((p: any) => p.variants?.[0]?.sku === sku), sku.slice(3));
+    const iphone16 = await read('/products/search?groupBy=variant&limit=50&q=' + encodeURIComponent('iPhone 16'));
+    assert(iphone16.data.every((p: any) => /iphone 16/i.test(`${p.model_name} ${p.variants?.[0]?.variant_name}`)),
+      'iPhone 16 must not return other models through SKU digits');
+  });
+  console.log(`Integration: ${passed}/8 checks passed (503 guard and PostgreSQL integration).`);
 } finally {
   await new Promise<void>(resolve => server.close(() => resolve()));
   await pool.end();

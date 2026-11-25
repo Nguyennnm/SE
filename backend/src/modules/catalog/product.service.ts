@@ -121,18 +121,36 @@ export class ProductService {
     //    So khớp trên tên model, thương hiệu, danh mục và tên biến thể.
     for (const word of params.q?.trim().split(/\s+/).filter(Boolean) ?? []) {
       // Treat wildcard characters as literal input; each word must match.
-      const kw = `%${word.toLowerCase().replace(/[\\%_]/g, '\\$&')}%`;
+      const escaped = word.toLowerCase().replace(/[\\%_]/g, '\\$&');
+      const kw = `%${escaped}%`;
       const like = `${stripAccents(`$${paramIndex}`)}`;
+      // Chỉ so khớp mã SKU khi người dùng thật sự gõ mã (vd "PV-240900701" hoặc
+      // "240900701"), so khớp từ đầu mã. Không so khớp chuỗi con, để từ khóa
+      // ngắn như "16" không khớp nhầm đuôi SKU "…016" (bug B006).
+      const skuPattern = /^pv-/i.test(word)
+        ? `${escaped}%`
+        : /^\d{6,}$/.test(word) ? `pv-${escaped}%` : null;
+      const skuParam = skuPattern ? paramIndex + 1 : null;
+      const skuMatch = skuParam
+        ? (byVariant
+          ? ` OR LOWER(rv.sku) LIKE $${skuParam}`
+          : ` OR EXISTS (SELECT 1 FROM eligible_variants v3 WHERE v3.product_id = p.id AND LOWER(v3.sku) LIKE $${skuParam})`)
+        : '';
       whereConditions.push(
         `(${stripAccents('p.model_name')} LIKE ${like} ` +
           `OR ${stripAccents('b.name')} LIKE ${like} ` +
           `OR ${stripAccents('c.name')} LIKE ${like} ` +
           (byVariant
-            ? `OR ${stripAccents('rv.variant_name')} LIKE ${like} OR ${stripAccents('rv.sku')} LIKE ${like})`
-            : `OR EXISTS (SELECT 1 FROM eligible_variants v2 WHERE v2.product_id = p.id AND ${stripAccents('v2.variant_name')} LIKE ${like}))`)
+            ? `OR ${stripAccents('rv.variant_name')} LIKE ${like}`
+            : `OR EXISTS (SELECT 1 FROM eligible_variants v2 WHERE v2.product_id = p.id AND ${stripAccents('v2.variant_name')} LIKE ${like})`) +
+          `${skuMatch})`
       );
       values.push(kw);
       paramIndex++;
+      if (skuPattern) {
+        values.push(skuPattern);
+        paramIndex++;
+      }
     }
 
     // 2. Lọc danh mục (Category) - BR04 (AND logic)
